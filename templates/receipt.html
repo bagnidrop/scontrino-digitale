@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Scontrino n. {{ r.number }} · {{ r.shop_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+{% block nav %}{% endblock %}
+{% block mainclass %}receipt-wrap{% endblock %}
+{% block content %}
+<article class="paper">
+  <header class="paper-head">
+    <h1>{{ r.shop_name }}</h1>
+    {% if r.shop_address %}<p>{{ r.shop_address }}</p>{% endif %}
+    {% if r.shop_vat %}<p>P.IVA {{ r.shop_vat }}</p>{% endif %}
+  </header>
+
+  <p class="meta">
+    Scontrino n. {{ r.number }} · {{ r.created_at|dt }}
+    {% if r.table_label %}<br>{{ r.table_label }}{% endif %}
+  </p>
+
+  <table class="items">
+    <tbody>
+    {% for it in items %}
+      <tr>
+        <td class="qty">{{ it.qty|qty }}×</td>
+        <td>{{ it.name }}<span class="sub">{{ it.unit_price_cents|euro }} cad.</span></td>
+        <td class="num">{{ it.line_total_cents|euro }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="total"><span>Totale</span><span>{{ r.total_cents|euro }}</span></div>
+  {% if r.payment_method %}<p class="meta">Pagamento: {{ r.payment_method }}</p>{% endif %}
+
+  <table class="vat">
+    <thead><tr><th>Aliquota IVA</th><th class="num">Imponibile</th><th class="num">IVA</th></tr></thead>
+    <tbody>
+    {% for v in vat_rows %}
+      <tr><td>{{ '%g' % v.rate }}%</td><td class="num">{{ v.net|euro }}</td><td class="num">{{ v.vat|euro }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if r.lottery_code %}<p class="meta">Codice lotteria: <strong>{{ r.lottery_code }}</strong></p>{% endif %}
+  {% if r.footer_note %}<p class="meta">{{ r.footer_note }}</p>{% endif %}
+  <p class="legal">Copia di cortesia dello scontrino. Il documento commerciale ai fini fiscali è quello emesso dal registratore telematico.</p>
+</article>
+
+<div class="actions">
+  <button type="button" class="btn ghost" data-print>Stampa / salva PDF</button>
+  {% if r.review_url %}<a class="btn" href="{{ r.review_url }}" rel="noopener noreferrer" target="_blank">Lascia una recensione</a>{% endif %}
+</div>
+
+<section class="card invoice" id="fattura">
+  <h2>Ti serve la fattura?</h2>
+  {% if inv %}
+    <p class="ok-box">Richiesta di fattura inviata il {{ inv.created_at|dt }} per <strong>{{ inv.company_name }}</strong>.</p>
+  {% elif not can_invoice %}
+    <p class="muted">Il termine per richiedere la fattura online è scaduto. Contatta direttamente il locale.</p>
+  {% else %}
+    {% if errors %}<div class="flash err"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <details {% if errors %}open{% endif %}>
+      <summary>Richiedi la fattura per questo scontrino</summary>
+      <form method="post" action="{{ url_for('receipt_invoice', token=r.token) }}" class="form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="trap" aria-hidden="true"><label>Sito web <input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <label>Ragione sociale / Nome e cognome <input name="company_name" required maxlength="120" value="{{ form.get('company_name','') }}"></label>
+        <label>Partita IVA <input name="vat_number" inputmode="numeric" maxlength="13" value="{{ form.get('vat_number','') }}"></label>
+        <label>Codice fiscale (se diverso o senza P.IVA) <input name="tax_code" maxlength="16" value="{{ form.get('tax_code','') }}"></label>
+        <label>Codice destinatario SDI <input name="sdi_code" maxlength="7" placeholder="7 caratteri (se non lo hai, lascia vuoto)" value="{{ form.get('sdi_code','') }}"></label>
+        <label>PEC (alternativa al codice SDI) <input type="email" name="pec" maxlength="120" value="{{ form.get('pec','') }}"></label>
+        <label>Indirizzo di fatturazione <input name="address" required maxlength="200" value="{{ form.get('address','') }}"></label>
+        <label>Email per ricevere la fattura <input type="email" name="email" required maxlength="120" value="{{ form.get('email','') }}"></label>
+        <button class="btn" type="submit">Invia richiesta</button>
+      </form>
+    </details>
+  {% endif %}
+</section>
+{% endblock %}

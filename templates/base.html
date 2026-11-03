@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Scontrino Digitale{% endblock %}</title>
+  {% block head %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% block nav %}
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}">Scontrino<span>Digitale</span></a>
+  <nav>
+    {% if me %}
+      <a href="{{ url_for('dashboard') }}">Panoramica</a>
+      <a href="{{ url_for('receipts_list') }}">Scontrini</a>
+      <a href="{{ url_for('invoices_list') }}">Fatture</a>
+      <a href="{{ url_for('contacts_list') }}">Contatti</a>
+      <a href="{{ url_for('settings') }}">Impostazioni</a>
+      <form method="post" action="{{ url_for('logout') }}" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="link" type="submit">Esci</button>
+      </form>
+    {% else %}
+      <a href="{{ url_for('login') }}">Accedi</a>
+      {% if allow_registration %}<a class="btn small" href="{{ url_for('register') }}">Prova gratis</a>{% endif %}
+    {% endif %}
+  </nav>
+</header>
+{% endblock %}
+<main class="{% block mainclass %}container{% endblock %}">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Impostazioni · Scontrino Digitale{% endblock %}
+{% block content %}
+<h1>Impostazioni</h1>
+
+{% if new_key %}
+<section class="card key-box">
+  <h2>La tua API key</h2>
+  <p>Copiala adesso e salvala in un posto sicuro: <strong>non verrà più mostrata</strong>.</p>
+  <pre class="code" id="apikey">{{ new_key }}</pre>
+  <button type="button" class="btn small" data-copy="#apikey">Copia</button>
+</section>
+{% endif %}
+
+<form method="post" class="card form">
+  <h2>Dati del locale</h2>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label>Nome del locale <input name="name" required maxlength="80" value="{{ s.name }}"></label>
+  <label>Indirizzo <input name="address" maxlength="200" value="{{ s.address }}"></label>
+  <label>Partita IVA <input name="vat_number" maxlength="13" value="{{ s.vat_number }}"></label>
+  <label>Link per le recensioni Google (opzionale) <input name="review_url" maxlength="300" placeholder="https://g.page/r/..." value="{{ s.review_url }}"></label>
+  <label>Messaggio inviato al cliente
+    <textarea name="message_template" rows="3" maxlength="300">{{ s.message_template }}</textarea>
+    <span class="hint">Puoi usare {negozio} e {link}.</span></label>
+  <label>Nota a piè di scontrino (opzionale) <input name="footer_note" maxlength="300" value="{{ s.footer_note }}"></label>
+  <label>Giorni entro cui il cliente può chiedere la fattura <input type="number" name="invoice_window_days" min="0" max="30" value="{{ s.invoice_window_days }}">
+    <span class="hint">Verifica con il tuo commercialista il termine corretto per la tua attività.</span></label>
+  <button class="btn" type="submit">Salva</button>
+</form>
+
+<section class="card">
+  <h2>Collegamento alla cassa</h2>
+  <p>Indirizzo API: <code>{{ base_url }}/api/v1/receipts</code></p>
+  <p>API key attuale: <code>{{ s.api_key_prefix }}…</code> (per sicurezza viene mostrata una sola volta).</p>
+  <form method="post" action="{{ url_for('regenerate_key') }}" class="inline" data-confirm="Generare una nuova API key? Quella attuale smetterà di funzionare.">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="btn ghost" type="submit">Genera nuova API key</button>
+  </form>
+</section>
+{% endblock %}

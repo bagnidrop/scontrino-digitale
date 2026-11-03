@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>Lo scontrino sul telefono del cliente.<br>Niente carta, più recensioni e fatture già pronte.</h1>
+  <p class="lead">Pensato per bar e ristoranti: il cliente inquadra un QR o riceve un messaggio, trova lo scontrino digitale e può chiedere la fattura in 30 secondi. Tu ricevi i dati già pronti.</p>
+  <p>
+    {% if allow_registration %}<a class="btn" href="{{ url_for('register') }}">Crea il tuo account</a>{% endif %}
+    <a class="btn ghost" href="{{ url_for('login') }}">Accedi</a>
+  </p>
+</section>
+
+<section class="grid3">
+  <div class="card"><h3>QR o numero di cellulare</h3><p>Il cliente sceglie: scansiona il QR sul conto oppure riceve il link su WhatsApp/SMS. Il numero non viene salvato senza il suo consenso.</p></div>
+  <div class="card"><h3>Richiesta fattura dal link</h3><p>Partita IVA controllata, codice SDI e PEC: ti arriva la richiesta completa, esportabile in CSV. Niente più foto di biglietti da visita.</p></div>
+  <div class="card"><h3>Si collega alla tua cassa</h3><p>Una semplice API: la cassa o il gestionale invia la vendita e riceve il link. Pannello con storico, statistiche e impostazioni.</p></div>
+</section>
+
+<p class="muted small center">Lo scontrino digitale è una copia di cortesia e affianca il documento commerciale emesso dal registratore telematico.</p>
+{% endblock %}

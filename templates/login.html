@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Accedi · Scontrino Digitale{% endblock %}
+{% block mainclass %}container narrow{% endblock %}
+{% block content %}
+<h1>Accedi</h1>
+<form method="post" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label>Email <input type="email" name="email" required autofocus autocomplete="username"></label>
+  <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
+  <button class="btn" type="submit">Accedi</button>
+</form>
+{% if allow_registration %}<p class="muted center">Non hai un account? <a href="{{ url_for('register') }}">Registrati</a></p>{% endif %}
+{% endblock %}

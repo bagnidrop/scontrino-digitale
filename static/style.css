@@ -1,0 +1,103 @@
+:root {
+  --bg: #f6f4ef; --surface: #ffffff; --ink: #1c2420; --muted: #6a736d;
+  --line: #e3dfd5; --accent: #1f6f50; --accent-ink: #ffffff; --danger: #b3321f; --ok-bg: #e5f3ec;
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141815; --surface: #1d231f; --ink: #eef1ee; --muted: #9aa59d;
+    --line: #2b332d; --accent: #4cb98a; --accent-ink: #0c1410; --danger: #ef7a68; --ok-bg: #1b2e25;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+h1 { font-size: 1.7rem; line-height: 1.25; margin: 1.2rem 0 .8rem; }
+h2 { font-size: 1.15rem; margin: 0 0 .6rem; }
+h3 { margin: 0 0 .4rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; }
+.container { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; }
+.narrow { max-width: 460px; }
+.center { text-align: center; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.lead { font-size: 1.1rem; color: var(--muted); max-width: 640px; }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { font-weight: 800; text-decoration: none; color: var(--ink); font-size: 1.1rem; }
+.brand span { color: var(--accent); }
+.topbar nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.topbar nav a { text-decoration: none; color: var(--ink); }
+.topbar nav a.btn { color: var(--accent-ink); }
+
+.btn, button.btn { display: inline-block; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent);
+  padding: 10px 18px; border-radius: 999px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.small { padding: 6px 14px; font-size: .9rem; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+button.link.danger { color: var(--danger); }
+form.inline { display: inline; }
+
+.hero { padding: 36px 0 20px; }
+.hero h1 { font-size: 2.1rem; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 20px 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin: 14px 0; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.flash { padding: 10px 14px; border-radius: 8px; margin: 12px 0; background: var(--ok-bg); border: 1px solid var(--line); }
+.flash.err { background: transparent; border-color: var(--danger); color: var(--danger); }
+.flash ul { margin: 0; padding-left: 18px; }
+.ok-box { background: var(--ok-bg); padding: 10px 14px; border-radius: 8px; }
+
+.form label { display: block; margin: 0 0 12px; font-weight: 600; font-size: .92rem; }
+.form input, .form textarea { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; font: inherit; font-weight: 400;
+  color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.form input:focus, .form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { display: block; font-weight: 400; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+.trap { position: absolute; left: -9999px; height: 0; overflow: hidden; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 10px 0 18px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; }
+.stat .label { color: var(--muted); font-size: .82rem; }
+.stat strong { font-size: 1.9rem; line-height: 1.2; }
+.stat .sub { color: var(--muted); font-size: .82rem; }
+
+table { border-collapse: collapse; width: 100%; }
+.tw { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+table.list { background: var(--surface); }
+table.list th, table.list td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+table.list td.small, table.list td:nth-child(n+3) { white-space: normal; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pager { display: flex; gap: 16px; align-items: center; justify-content: center; }
+.pill { border: 0; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.pill.nuova { background: #f6d9a8; color: #5a3b00; }
+.pill.evasa { background: var(--ok-bg); color: var(--accent); }
+pre.code { background: #111713; color: #d6ecdd; padding: 14px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+.key-box { border-color: var(--accent); }
+
+/* ---- scontrino per il cliente ---- */
+.receipt-wrap { max-width: 440px; margin: 0 auto; padding: 20px 14px 48px; }
+.paper { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 22px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .06); }
+.paper-head { text-align: center; border-bottom: 1px dashed var(--line); padding-bottom: 12px; margin-bottom: 10px; }
+.paper-head h1 { margin: 0 0 4px; font-size: 1.35rem; }
+.paper-head p, .paper .meta { margin: 2px 0; color: var(--muted); font-size: .88rem; }
+.paper .meta { text-align: center; }
+.items td { padding: 7px 0; vertical-align: top; }
+.items .qty { width: 2.6em; color: var(--muted); }
+.items .sub { display: block; color: var(--muted); font-size: .78rem; }
+.total { display: flex; justify-content: space-between; font-size: 1.35rem; font-weight: 800;
+  border-top: 2px solid var(--ink); border-bottom: 1px dashed var(--line); padding: 10px 0; margin: 8px 0; }
+.vat { font-size: .78rem; color: var(--muted); margin-top: 10px; }
+.vat th { text-align: left; font-weight: 600; }
+.legal { margin: 14px 0 0; font-size: .72rem; color: var(--muted); text-align: center; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 18px 0; }
+.invoice summary { cursor: pointer; font-weight: 600; color: var(--accent); margin-bottom: 12px; }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .actions, .invoice, .topbar { display: none !important; }
+  .paper { box-shadow: none; border: 0; }
+}

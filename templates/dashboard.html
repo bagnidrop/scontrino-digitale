@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Panoramica · Scontrino Digitale{% endblock %}
+{% block content %}
+<h1>Ciao, {{ me.name }}</h1>
+
+<section class="stats">
+  <div class="stat"><span class="label">Oggi</span><strong>{{ stats.today.count }}</strong><span class="sub">scontrini · {{ stats.today.total|euro }}</span></div>
+  <div class="stat"><span class="label">Ultimi 7 giorni</span><strong>{{ stats.week.count }}</strong><span class="sub">scontrini · {{ stats.week.total|euro }}</span></div>
+  <div class="stat"><span class="label">Ultimi 30 giorni</span><strong>{{ stats.month.count }}</strong>
+    <span class="sub">{% if stats.month.count %}{{ (stats.month.opened * 100 // stats.month.count) }}% aperti dal cliente{% else %}nessuno scontrino{% endif %}</span></div>
+  <div class="stat"><span class="label">Fatture da evadere</span><strong>{{ stats.pending_invoices }}</strong><span class="sub"><a href="{{ url_for('invoices_list') }}">vedi richieste</a></span></div>
+  <div class="stat"><span class="label">Messaggi inviati (30 gg)</span><strong>{{ stats.messages_month }}</strong><span class="sub">WhatsApp / SMS</span></div>
+</section>
+
+<section class="card">
+  <h2>Prova subito</h2>
+  <p>Genera uno scontrino di esempio e guarda cosa vedrebbe il cliente.</p>
+  <form method="post" action="{{ url_for('test_receipt') }}" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="btn" type="submit">Crea scontrino di prova</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Collega la cassa</h2>
+  <p>La tua cassa (o il gestionale) invia ogni vendita a questo indirizzo. Riceve in risposta il link da stampare come QR o da mandare via messaggio. La API key si trova in <a href="{{ url_for('settings') }}">Impostazioni</a>.</p>
+  <pre class="code">curl -X POST {{ base_url }}/api/v1/receipts \
+  -H "X-API-Key: LA_TUA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"external_id":"CASSA1-0001","table":"Tavolo 5","payment_method":"Carta",
+       "items":[{"name":"Caffè","qty":2,"unit_price":1.2,"vat_rate":10}]}'</pre>
+</section>
+
+<section>
+  <h2>Ultimi scontrini</h2>
+  {% if recent %}
+  <div class="tw"><table class="list">
+    <thead><tr><th>N.</th><th>Data</th><th class="num">Totale</th><th></th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr><td>{{ r.number }}</td><td>{{ r.created_at|dt }}</td><td class="num">{{ r.total_cents|euro }}</td>
+        <td><a href="{{ url_for('receipt_view', token=r.token) }}" target="_blank" rel="noopener">Apri</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">Ancora nessuno scontrino.</p>{% endif %}
+</section>
+{% endblock %}

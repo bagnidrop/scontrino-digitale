@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Richieste di fattura · Scontrino Digitale{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>Richieste di fattura</h1>
+  <a class="btn ghost" href="{{ url_for('invoices_csv') }}">Esporta CSV</a>
+</div>
+{% if rows %}
+<div class="tw"><table class="list">
+  <thead><tr><th>Ricevuta il</th><th>Scontrino</th><th>Cliente</th><th>Dati fiscali</th><th>Invio</th><th>Stato</th></tr></thead>
+  <tbody>
+  {% for i in rows %}
+    <tr>
+      <td>{{ i.created_at|dt }}</td>
+      <td>n. {{ i.number }}<br><span class="muted small">{{ i.total_cents|euro }}</span></td>
+      <td><strong>{{ i.company_name }}</strong><br><span class="muted small">{{ i.address }}</span></td>
+      <td class="small">{% if i.vat_number %}P.IVA {{ i.vat_number }}<br>{% endif %}{% if i.tax_code %}CF {{ i.tax_code }}{% endif %}</td>
+      <td class="small">SDI: {{ i.sdi_code }}{% if i.pec %}<br>PEC: {{ i.pec }}{% endif %}<br>{{ i.email }}</td>
+      <td>
+        <form method="post" action="{{ url_for('invoice_status', inv_id=i.id) }}" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <button class="pill {{ i.status }}" type="submit" title="Clicca per cambiare stato">{{ i.status }}</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="muted">Nessuna richiesta di fattura per ora.</p>{% endif %}
+{% endblock %}
