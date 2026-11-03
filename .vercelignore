@@ -1,0 +1,8 @@
+instance/
+backups/
+.env
+test_app.py
+Dockerfile
+docker-compose.yml
+Caddyfile
+backup.sh

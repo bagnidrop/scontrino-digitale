@@ -1,4 +1,8 @@
-"""Test end-to-end:  python -m unittest test_app -v"""
+"""Test end-to-end:  python -m pytest -q
+
+Di default usano SQLite. Per provarli su Postgres:
+  TEST_DATABASE_URL=postgresql://utente:password@localhost/db_di_prova python -m pytest -q
+(le tabelle del database indicato vengono cancellate e ricreate)."""
 import os
 import re
 import tempfile
@@ -11,6 +15,17 @@ os.environ["MESSAGING_PROVIDER"] = "console"
 import app as appmod  # noqa: E402
 
 VALID_PIVA = "12345678903"  # cifra di controllo valida
+TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+
+def make_config(name):
+    """Configurazione di prova: file SQLite temporaneo oppure Postgres pulito."""
+    if TEST_DB_URL:
+        import psycopg
+        with psycopg.connect(TEST_DB_URL, autocommit=True) as con:
+            con.execute("DROP SCHEMA public CASCADE")
+            con.execute("CREATE SCHEMA public")
+    return {"DATABASE": os.path.join(_tmp, name), "DATABASE_URL": TEST_DB_URL, "TESTING": True}
 
 
 def csrf_of(client, path="/login"):
@@ -21,7 +36,7 @@ def csrf_of(client, path="/login"):
 class Flow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = appmod.create_app({"DATABASE": os.path.join(_tmp, "t.db"), "TESTING": True})
+        cls.app = appmod.create_app(make_config("t.db"))
         cls.c = cls.app.test_client()
         tok = csrf_of(cls.c, "/register")
         r = cls.c.post("/register", data={"csrf": tok, "name": "Trattoria Da Mario",

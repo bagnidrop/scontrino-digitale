@@ -9,7 +9,9 @@ MVP multi-negozio per **bar e ristoranti**: la cassa invia la vendita via API e 
 ```bash
 pip install -r requirements.txt
 python app.py            # http://127.0.0.1:5000
-pytest                   # test automatici
+pytest                   # test automatici (SQLite)
+# su Postgres (cancella e ricrea le tabelle del database indicato):
+# TEST_DATABASE_URL=postgresql://utente:pw@localhost/db_di_prova pytest
 ```
 
 1. Apri `/register` e crea l'account del locale: ricevi la **API key** (si vede una sola volta).
@@ -63,7 +65,8 @@ Risposta `201` con `token`, `url` (da stampare come QR) e `qr_svg_url`.
 
 | Variabile | Significato |
 |---|---|
-| `SECRET_KEY` | Chiave delle sessioni (se assente ne viene generata una in `instance/`) |
+| `DATABASE_URL` | Postgres (`postgresql://...`). Se assente usa il file SQLite in `instance/` (solo locale/Docker) |
+| `SECRET_KEY` | Chiave delle sessioni. **Obbligatoria su Vercel**; altrove, se assente, ne viene generata una in `instance/` |
 | `PUBLIC_BASE_URL` | Dominio pubblico usato nei link, es. `https://scontrini.miodominio.it` |
 | `COOKIE_SECURE=1` | Cookie solo HTTPS (da attivare in produzione) |
 | `BEHIND_PROXY=1` | Se sta dietro a nginx/Caddy/un load balancer |
@@ -75,7 +78,34 @@ Risposta `201` con `token`, `url` (da stampare come QR) e `qr_svg_url`.
 
 **WhatsApp:** per scrivere a un cliente che non ti ha contattato nelle ultime 24 ore servono template approvati da Meta e l'opt-in del cliente. Per un test iniziale usa la sandbox Twilio.
 
-## Pubblicazione su un server (Docker)
+## Pubblicazione su Vercel (con database Postgres)
+
+Su Vercel il disco non è persistente, quindi i dati stanno in un database Postgres esterno. L'app crea da sola le tabelle al primo avvio.
+
+1. **Database.** Crea un progetto su [Neon](https://neon.tech) scegliendo la regione **Frankfurt (eu-central-1)**. Copia la stringa di connessione **pooled** (contiene `-pooler`). In alternativa, da Vercel → *Storage / Marketplace* aggiungi Neon: imposta `DATABASE_URL` da solo.
+2. **Progetto.** Su [vercel.com](https://vercel.com) → *Add New → Project* → importa il repository GitHub. Vercel riconosce Flask da `app.py`.
+3. **Variabili d'ambiente** (*Settings → Environment Variables*):
+
+   | Nome | Valore |
+   |---|---|
+   | `DATABASE_URL` | la stringa Postgres (già presente se hai usato il Marketplace) |
+   | `SECRET_KEY` | `python3 -c "import secrets;print(secrets.token_hex(32))"` |
+   | `ALLOW_REGISTRATION` | `1` per ora; poi `0` |
+   | `MESSAGING_PROVIDER` | `console` per provare, `twilio` per inviare davvero (+ variabili Twilio) |
+   | `PUBLIC_BASE_URL` | il tuo dominio finale, es. `https://scontrini.tuodominio.it` (facoltativa) |
+
+4. **Deploy.** Controlla `https://TUO-PROGETTO.vercel.app/healthz`, crea il tuo account da `/register`, poi imposta `ALLOW_REGISTRATION=0` e rilancia il deploy (su Vercel le variabili si applicano al deploy successivo).
+5. **Dominio.** *Settings → Domains* per usare il tuo dominio.
+
+Ogni `git push` su `main` pubblica automaticamente la nuova versione.
+
+Cose da sapere:
+- `vercel.json` fissa la regione delle funzioni a Francoforte (`fra1`), vicina al database.
+- Con `MESSAGING_PROVIDER=console` i messaggi **non vengono spediti**: compaiono nei *Runtime Logs* di Vercel con il numero mascherato.
+- Il limite di richieste dell'API è per singola istanza (best effort); quelli su login e richieste fattura sono condivisi tra le istanze perché salvati nel database.
+- Il piano gratuito *Hobby* di Vercel è pensato per uso personale e non commerciale: per vendere il servizio ai locali serve un piano a pagamento (controlla i termini aggiornati).
+
+## Pubblicazione su un tuo server (Docker)
 
 Servono un VPS Linux con Docker e un dominio con record DNS **A** verso l'IP del server.
 
@@ -98,7 +128,7 @@ Caddy ottiene da solo il certificato HTTPS. Controlla `https://TUO_DOMINIO/healt
 
 **Log:** `docker compose logs -f app`
 
-Per più di poche decine di locali passa a PostgreSQL (lo schema è standard). Firewall consigliato: aperte solo le porte 22, 80 e 443.
+Per più di poche decine di locali imposta `DATABASE_URL` su un Postgres (stesso codice, nessuna modifica). Firewall consigliato: aperte solo le porte 22, 80 e 443.
 
 ## Sicurezza e privacy già previste
 

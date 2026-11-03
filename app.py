@@ -8,7 +8,6 @@ import io
 import os
 import re
 import secrets
-import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -20,7 +19,7 @@ from flask import (Flask, Response, abort, flash, g, jsonify, redirect,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import messaging
-from db import close_db, get_db, init_db
+from db import IntegrityError, close_db, get_db, init_db
 
 try:
     from zoneinfo import ZoneInfo
@@ -97,8 +96,21 @@ def csv_safe(value):
 _hits = {}
 
 
-def rate_limited(key, limit, window):
+def rate_limited(key, limit, window, shared=False):
+    """Limite di tentativi. shared=True usa il database (valido tra tutte le istanze
+    serverless); altrimenti la memoria del processo, sufficiente per l'API."""
     now = time.time()
+    if shared:
+        db = get_db()
+        db.execute("DELETE FROM rate_hits WHERE key = ? AND ts < ?", (key, now - window))
+        n = db.execute("SELECT COUNT(*) FROM rate_hits WHERE key = ? AND ts >= ?",
+                       (key, now - window)).fetchone()[0]
+        if n < limit:
+            db.execute("INSERT INTO rate_hits (key, ts) VALUES (?, ?)", (key, now))
+        if secrets.randbelow(50) == 0:  # pulizia occasionale delle chiavi inattive
+            db.execute("DELETE FROM rate_hits WHERE ts < ?", (now - 86400,))
+        db.commit()
+        return n >= limit
     recent = [t for t in _hits.get(key, []) if now - t < window]
     if len(recent) >= limit:
         _hits[key] = recent
@@ -161,17 +173,16 @@ def insert_receipt(shop_id, items, meta):
     total = sum(i["line_total_cents"] for i in items)
     vat = sum(i["vat_cents"] for i in items)
     token = secrets.token_urlsafe(12)
-    db.execute("BEGIN IMMEDIATE")
     try:
+        db.lock_shop(shop_id)
         number = db.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM receipts WHERE shop_id = ?",
                             (shop_id,)).fetchone()[0]
-        cur = db.execute(
+        rid = db.insert(
             "INSERT INTO receipts (shop_id, token, number, external_id, total_cents, vat_cents,"
             " payment_method, table_label, lottery_code, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (shop_id, token, number, meta.get("external_id"), total, vat,
              meta.get("payment_method", ""), meta.get("table_label", ""),
              meta.get("lottery_code", ""), now_iso()))
-        rid = cur.lastrowid
         db.executemany(
             "INSERT INTO receipt_items (receipt_id, name, qty, unit_price_cents, vat_rate,"
             " line_total_cents, vat_cents) VALUES (?,?,?,?,?,?,?)",
@@ -204,12 +215,12 @@ def create_shop(name, email, password):
     """Crea un negozio e ritorna (id, api_key in chiaro). Usata da registrazione e manage.py."""
     key, key_hash, prefix = new_api_key()
     db = get_db()
-    cur = db.execute(
+    shop_id = db.insert(
         "INSERT INTO shops (name, email, password_hash, api_key_hash, api_key_prefix, created_at)"
         " VALUES (?,?,?,?,?,?)",
         (name, email.lower(), generate_password_hash(password), key_hash, prefix, now_iso()))
     db.commit()
-    return cur.lastrowid, key
+    return shop_id, key
 
 
 def _load_secret(instance_dir):
@@ -225,28 +236,50 @@ def _load_secret(instance_dir):
 
 
 # -------------------------------------------------------------- applicazione
+def _secret_key(instance, on_vercel):
+    key = os.environ.get("SECRET_KEY")
+    if key:
+        return key
+    if on_vercel:  # il disco è in sola lettura e ogni istanza ne avrebbe una diversa
+        raise RuntimeError("Imposta SECRET_KEY tra le Environment Variables del progetto Vercel.")
+    return _load_secret(instance)
+
+
 def create_app(config=None):
-    app = Flask(__name__)
-    instance = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance")
-    os.makedirs(instance, exist_ok=True)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # I file statici stanno in public/: Vercel li serve dalla CDN, in locale li serve Flask.
+    app = Flask(__name__, static_folder=os.path.join(base_dir, "public", "static"),
+                static_url_path="/static")
+    on_vercel = bool(os.environ.get("VERCEL"))
+    database_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or ""
+    if on_vercel and not database_url:
+        raise RuntimeError("Imposta DATABASE_URL (Postgres) tra le Environment Variables di Vercel: "
+                           "su Vercel il disco non è persistente e SQLite perderebbe i dati.")
+    instance = os.path.join(base_dir, "instance")
+    try:
+        os.makedirs(instance, exist_ok=True)
+    except OSError:  # disco in sola lettura: con Postgres non serve
+        if not database_url:
+            raise
     app.config.update(
         DATABASE=os.path.join(instance, "scontrini.db"),
-        SECRET_KEY=os.environ.get("SECRET_KEY") or _load_secret(instance),
+        DATABASE_URL=database_url,
+        SECRET_KEY=_secret_key(instance, on_vercel),
         PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "").rstrip("/"),
         ALLOW_REGISTRATION=os.environ.get("ALLOW_REGISTRATION", "1") == "1",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") == "1",
+        SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "1" if on_vercel else "0") == "1",
         PERMANENT_SESSION_LIFETIME=timedelta(days=14),
         MAX_CONTENT_LENGTH=256 * 1024,
     )
     if config:
         app.config.update(config)
-    if os.environ.get("BEHIND_PROXY") == "1":
+    if os.environ.get("BEHIND_PROXY", "1" if on_vercel else "0") == "1":
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    init_db(app.config["DATABASE"])
+    init_db(app.config)
     app.teardown_appcontext(close_db)
     app.jinja_env.filters.update(euro=euro, dt=fmt_dt, qty=fmt_qty)
 
@@ -385,7 +418,7 @@ def create_app(config=None):
                 return jsonify(receipt_payload(row)), 200
         try:
             row = insert_receipt(shop_id, items, meta)
-        except sqlite3.IntegrityError:
+        except IntegrityError:
             row = db.execute("SELECT * FROM receipts WHERE shop_id = ? AND external_id = ?",
                              (shop_id, ext)).fetchone()
             if row is None:
@@ -425,7 +458,8 @@ def create_app(config=None):
                    (receipt["id"], channel, messaging.mask_phone(phone), status, error, now_iso()))
         # Il numero si conserva SOLO con consenso marketing esplicito.
         if data.get("marketing_consent") is True and status == "sent":
-            db.execute("INSERT OR IGNORE INTO contacts (shop_id, phone, consent_at) VALUES (?,?,?)",
+            db.execute("INSERT INTO contacts (shop_id, phone, consent_at) VALUES (?,?,?)"
+                       " ON CONFLICT DO NOTHING",
                        (shop["id"], phone, now_iso()))
         db.commit()
         if status != "sent":
@@ -468,7 +502,7 @@ def create_app(config=None):
         r = load_receipt(token)
         if r is None:
             abort(404)
-        if rate_limited(f"inv:{request.remote_addr}", 10, 3600):
+        if rate_limited(f"inv:{request.remote_addr}", 10, 3600, shared=True):
             abort(400)
         db = get_db()
         items = db.execute("SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY id",
@@ -510,12 +544,15 @@ def create_app(config=None):
         if errors:
             return render_template("receipt.html", r=r, items=items, vat_rows=vat_breakdown(items),
                                    inv=existing, can_invoice=can_invoice, form=f, errors=errors), 422
-        db.execute(
-            "INSERT INTO invoice_requests (receipt_id, company_name, vat_number, tax_code, sdi_code,"
-            " pec, address, email, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (r["id"], f["company_name"], f["vat_number"], f["tax_code"], f["sdi_code"] or "0000000",
-             f["pec"], f["address"], f["email"], now_iso()))
-        db.commit()
+        try:
+            db.execute(
+                "INSERT INTO invoice_requests (receipt_id, company_name, vat_number, tax_code, sdi_code,"
+                " pec, address, email, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (r["id"], f["company_name"], f["vat_number"], f["tax_code"], f["sdi_code"] or "0000000",
+                 f["pec"], f["address"], f["email"], now_iso()))
+            db.commit()
+        except IntegrityError:  # la richiesta esiste già
+            db.rollback()
         flash("Richiesta inviata: il locale emetterà la fattura ai dati indicati.", "ok")
         return redirect(url_for("receipt_view", token=token) + "#fattura")
 
@@ -544,7 +581,7 @@ def create_app(config=None):
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
-            if rate_limited(f"login:{request.remote_addr}", 10, 300):
+            if rate_limited(f"login:{request.remote_addr}", 10, 300, shared=True):
                 flash("Troppi tentativi. Riprova tra qualche minuto.", "err")
                 return render_template("login.html"), 429
             email = request.form.get("email", "").strip().lower()
@@ -574,7 +611,7 @@ def create_app(config=None):
             return (midnight - timedelta(days=days)).astimezone(timezone.utc).isoformat(timespec="seconds")
 
         def agg(days):
-            row = db.execute("SELECT COUNT(*) c, COALESCE(SUM(total_cents),0) t, COALESCE(SUM(views>0),0) v"
+            row = db.execute("SELECT COUNT(*) AS c, COALESCE(SUM(total_cents),0) AS t, COALESCE(SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END),0) AS v"
                              " FROM receipts WHERE shop_id = ? AND created_at >= ?", (sid, since(days))).fetchone()
             return dict(count=row["c"], total=row["t"], opened=row["v"])
 

@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py db.py messaging.py ./
-COPY static ./static
+COPY public ./public
 COPY templates ./templates
 
 # Il database e la chiave segreta vivono in /app/instance (volume persistente)

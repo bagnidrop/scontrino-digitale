@@ -5,3 +5,5 @@ __pycache__/
 .env
 test_app.py
 README.md
+vercel.json
+.vercelignore

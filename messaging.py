@@ -16,6 +16,7 @@ import base64
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -61,11 +62,16 @@ def send(channel, to, body, template_vars=None):
 
 
 def _send_console(channel, to, body):
-    path = os.environ.get("OUTBOX_PATH") or os.path.join(BASE_DIR, "instance", "outbox.log")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    """Modalità prova: non spedisce nulla. Scrive su file, o nei log se il disco è in sola lettura."""
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(f"[{stamp}] ({channel}) a {mask_phone(to)}: {body}\n")
+    line = f"[{stamp}] ({channel}) a {mask_phone(to)}: {body}"
+    path = os.environ.get("OUTBOX_PATH") or os.path.join(BASE_DIR, "instance", "outbox.log")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except OSError:  # es. Vercel: i log della funzione fanno da "outbox"
+        print("[outbox] " + line, file=sys.stderr, flush=True)
     return "sent", None
 
 
