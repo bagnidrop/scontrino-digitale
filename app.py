@@ -382,7 +382,8 @@ def create_app(config=None):
     # ------------------------------------------------------------------- API cassa
     def receipt_payload(row):
         return {"id": row["id"], "token": row["token"], "number": row["number"],
-                "total_cents": row["total_cents"], "url": public_url(row["token"]),
+                "total_cents": row["total_cents"], "voided": row["voided_at"] is not None,
+                "url": public_url(row["token"]),
                 "qr_svg_url": public_url(row["token"]) + "/qr.svg"}
 
     @app.post("/api/v1/receipts")
@@ -438,6 +439,8 @@ def create_app(config=None):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             raise ApiError("corpo JSON mancante o non valido")
+        if receipt["voided_at"]:
+            raise ApiError("scontrino annullato: non si può inviare", 409)
         phone = messaging.normalize_phone(data.get("phone"))
         if not phone:
             raise ApiError("numero di telefono non valido")
@@ -466,6 +469,21 @@ def create_app(config=None):
             return jsonify(status=status, error=error), 502
         return jsonify(status="sent", url=link)
 
+    @app.post("/api/v1/receipts/<token>/void")
+    @api_auth
+    def api_void_receipt(token):
+        """Annulla uno scontrino (es. vendita stornata in cassa). Idempotente."""
+        db = get_db()
+        row = db.execute("SELECT * FROM receipts WHERE token = ? AND shop_id = ?",
+                         (token, g.api_shop["id"])).fetchone()
+        if row is None:
+            raise ApiError("scontrino non trovato", 404)
+        if row["voided_at"] is None:
+            db.execute("UPDATE receipts SET voided_at = ? WHERE id = ?", (now_iso(), row["id"]))
+            db.commit()
+            row = db.execute("SELECT * FROM receipts WHERE id = ?", (row["id"],)).fetchone()
+        return jsonify(receipt_payload(row))
+
     # --------------------------------------------------------- scontrino per il cliente
     def load_receipt(token):
         return get_db().execute(
@@ -485,7 +503,8 @@ def create_app(config=None):
                            (r["id"],)).fetchall()
         inv = db.execute("SELECT * FROM invoice_requests WHERE receipt_id = ?", (r["id"],)).fetchone()
         age = now_utc() - parse_iso(r["created_at"])
-        can_invoice = inv is None and age <= timedelta(days=r["invoice_window_days"])
+        can_invoice = (inv is None and r["voided_at"] is None
+                       and age <= timedelta(days=r["invoice_window_days"]))
         return render_template("receipt.html", r=r, items=items, vat_rows=vat_breakdown(items),
                                inv=inv, can_invoice=can_invoice, form={}, errors=[])
 
@@ -509,7 +528,8 @@ def create_app(config=None):
                            (r["id"],)).fetchall()
         existing = db.execute("SELECT * FROM invoice_requests WHERE receipt_id = ?", (r["id"],)).fetchone()
         age = now_utc() - parse_iso(r["created_at"])
-        can_invoice = existing is None and age <= timedelta(days=r["invoice_window_days"])
+        can_invoice = (existing is None and r["voided_at"] is None
+                       and age <= timedelta(days=r["invoice_window_days"]))
 
         f = {k: request.form.get(k, "").strip() for k in
              ("company_name", "vat_number", "tax_code", "sdi_code", "pec", "address", "email")}
@@ -612,13 +632,14 @@ def create_app(config=None):
 
         def agg(days):
             row = db.execute("SELECT COUNT(*) AS c, COALESCE(SUM(total_cents),0) AS t, COALESCE(SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END),0) AS v"
-                             " FROM receipts WHERE shop_id = ? AND created_at >= ?", (sid, since(days))).fetchone()
+                             " FROM receipts WHERE shop_id = ? AND voided_at IS NULL AND created_at >= ?",
+                             (sid, since(days))).fetchone()
             return dict(count=row["c"], total=row["t"], opened=row["v"])
 
         stats = {"today": agg(0), "week": agg(6), "month": agg(29)}
         stats["pending_invoices"] = db.execute(
             "SELECT COUNT(*) FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
-            " WHERE r.shop_id = ? AND i.status = 'nuova'", (sid,)).fetchone()[0]
+            " WHERE r.shop_id = ? AND i.status = 'nuova' AND r.voided_at IS NULL", (sid,)).fetchone()[0]
         stats["messages_month"] = db.execute(
             "SELECT COUNT(*) FROM messages m JOIN receipts r ON r.id = m.receipt_id"
             " WHERE r.shop_id = ? AND m.status = 'sent' AND m.created_at >= ?", (sid, since(29))).fetchone()[0]
@@ -642,6 +663,29 @@ def create_app(config=None):
             (sid, per, (page - 1) * per)).fetchall()
         return render_template("receipts.html", rows=rows, page=page, pages=max(1, -(-total // per)))
 
+    def _set_voided(rid, voided):
+        db = get_db()
+        row = db.execute("SELECT id, number FROM receipts WHERE id = ? AND shop_id = ?",
+                         (rid, g.panel_shop["id"])).fetchone()
+        if row is None:
+            abort(404)
+        db.execute("UPDATE receipts SET voided_at = ? WHERE id = ?",
+                   (now_iso() if voided else None, rid))
+        db.commit()
+        flash(f"Scontrino n. {row['number']} {'annullato' if voided else 'ripristinato'}.", "ok")
+        page = request.form.get("page", 1, type=int)
+        return redirect(url_for("receipts_list", page=max(1, page)))
+
+    @app.post("/dashboard/receipts/<int:rid>/void")
+    @login_required
+    def receipt_void(rid):
+        return _set_voided(rid, True)
+
+    @app.post("/dashboard/receipts/<int:rid>/restore")
+    @login_required
+    def receipt_restore(rid):
+        return _set_voided(rid, False)
+
     @app.get("/dashboard/invoices")
     @login_required
     def invoices_list():
@@ -649,7 +693,8 @@ def create_app(config=None):
 
     def _invoice_rows(sid):
         return get_db().execute(
-            "SELECT i.*, r.number, r.total_cents, r.vat_cents, r.created_at AS receipt_date, r.token"
+            "SELECT i.*, r.number, r.total_cents, r.vat_cents, r.created_at AS receipt_date, r.token,"
+            " r.voided_at AS receipt_voided"
             " FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
             " WHERE r.shop_id = ? ORDER BY i.id DESC", (sid,)).fetchall()
 

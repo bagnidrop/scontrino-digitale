@@ -4,7 +4,8 @@
 {% block nav %}{% endblock %}
 {% block mainclass %}receipt-wrap{% endblock %}
 {% block content %}
-<article class="paper">
+<article class="paper{% if r.voided_at %} voided{% endif %}">
+  {% if r.voided_at %}<p class="void-banner" role="status">SCONTRINO ANNULLATO<span>Il locale ha annullato questo scontrino: non è valido.</span></p>{% endif %}
   <header class="paper-head">
     <h1>{{ r.shop_name }}</h1>
     {% if r.shop_address %}<p>{{ r.shop_address }}</p>{% endif %}
@@ -54,6 +55,8 @@
   <h2>Ti serve la fattura?</h2>
   {% if inv %}
     <p class="ok-box">Richiesta di fattura inviata il {{ inv.created_at|dt }} per <strong>{{ inv.company_name }}</strong>.</p>
+  {% elif r.voided_at %}
+    <p class="muted">Scontrino annullato: non è possibile richiedere la fattura.</p>
   {% elif not can_invoice %}
     <p class="muted">Il termine per richiedere la fattura online è scaduto. Contatta direttamente il locale.</p>
   {% else %}

@@ -165,5 +165,118 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.c.post("/api/v1/receipts", json={}, headers=self.hdr()).status_code, 401)
 
 
+def register(app, name, email):
+    client = app.test_client()
+    r = client.post("/register", data={"csrf": csrf_of(client, "/register"), "name": name, "email": email,
+                    "password": "password123"}, follow_redirects=True)
+    key = re.search(r'id="apikey">([^<]+)<', r.get_data(as_text=True)).group(1)
+    return client, key
+
+
+class Voiding(unittest.TestCase):
+    """Annullo scontrini: API, pannello, pagina cliente, statistiche, isolamento tra locali."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = appmod.create_app(make_config("v.db"))
+        cls.c, cls.key = register(cls.app, "Osteria Uno", "uno@example.com")
+        cls.other, cls.key2 = register(cls.app, "Bar Due", "due@example.com")
+
+    def sale(self, price="10.00", key=None):
+        r = self.c.post("/api/v1/receipts", headers={"X-API-Key": key or self.key}, json={
+            "items": [{"name": "Piatto", "qty": 1, "unit_price": price, "vat_rate": 10}]})
+        self.assertEqual(r.status_code, 201)
+        return r.get_json()
+
+    def test_01_api_void_is_idempotent_and_blocks_actions(self):
+        s = self.sale()
+        self.assertFalse(s["voided"])
+        for _ in range(2):  # la seconda chiamata non deve dare errore
+            r = self.c.post(f"/api/v1/receipts/{s['token']}/void", headers={"X-API-Key": self.key})
+            self.assertEqual(r.status_code, 200)
+            self.assertTrue(r.get_json()["voided"])
+        page = self.c.get(f"/r/{s['token']}").get_data(as_text=True)
+        self.assertIn("SCONTRINO ANNULLATO", page)
+        self.assertNotIn('name="company_name"', page)  # niente modulo fattura
+        send = self.c.post(f"/api/v1/receipts/{s['token']}/send", json={"phone": "3331234567"},
+                           headers={"X-API-Key": self.key})
+        self.assertEqual(send.status_code, 409)
+        client = self.app.test_client()
+        inv = client.post(f"/r/{s['token']}/invoice", data={
+            "csrf": csrf_of(client, "/login"), "company_name": "ACME", "vat_number": VALID_PIVA,
+            "address": "Via Roma 1", "email": "a@b.it"})
+        self.assertEqual(inv.status_code, 422)
+
+    def test_02_panel_void_and_restore(self):
+        s = self.sale()
+        t = csrf_of(self.c, "/dashboard/settings")
+        r = self.c.post(f"/dashboard/receipts/{s['id']}/void", data={"csrf": t}, follow_redirects=True)
+        html = r.get_data(as_text=True)
+        self.assertIn("annullato", html)
+        self.assertIn("Ripristina", html)
+        self.assertIn("SCONTRINO ANNULLATO", self.c.get(f"/r/{s['token']}").get_data(as_text=True))
+        r = self.c.post(f"/dashboard/receipts/{s['id']}/restore", data={"csrf": t}, follow_redirects=True)
+        self.assertIn("ripristinato", r.get_data(as_text=True))
+        self.assertNotIn("SCONTRINO ANNULLATO", self.c.get(f"/r/{s['token']}").get_data(as_text=True))
+
+    def test_03_panel_void_requires_csrf_and_login(self):
+        s = self.sale()
+        self.assertEqual(self.c.post(f"/dashboard/receipts/{s['id']}/void", data={}).status_code, 400)
+        anon = self.app.test_client()
+        t = csrf_of(anon, "/login")
+        r = anon.post(f"/dashboard/receipts/{s['id']}/void", data={"csrf": t})
+        self.assertEqual(r.status_code, 302)  # rimandato al login, non annullato
+        self.assertNotIn("SCONTRINO ANNULLATO", self.c.get(f"/r/{s['token']}").get_data(as_text=True))
+
+    def test_04_other_shop_cannot_void(self):
+        s = self.sale()
+        r = self.other.post(f"/api/v1/receipts/{s['token']}/void", headers={"X-API-Key": self.key2})
+        self.assertEqual(r.status_code, 404)
+        t = csrf_of(self.other, "/dashboard/settings")
+        r = self.other.post(f"/dashboard/receipts/{s['id']}/void", data={"csrf": t})
+        self.assertEqual(r.status_code, 404)
+        self.assertNotIn("SCONTRINO ANNULLATO", self.c.get(f"/r/{s['token']}").get_data(as_text=True))
+
+    def test_05_voided_excluded_from_stats(self):
+        client, key = register(self.app, "Pizzeria Tre", "tre@example.com")
+        keep = self.sale("5.00", key)
+        gone = self.sale("10.00", key)
+        client.post(f"/api/v1/receipts/{gone['token']}/void", headers={"X-API-Key": key})
+        html = client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("5,00 €", html)
+        self.assertNotIn("15,00 €", html)  # 5 + 10 senza lo scontrino annullato
+        self.assertEqual(keep["number"], 1)
+        self.assertEqual(gone["number"], 2)  # la numerazione non ha buchi
+
+    def test_06_unknown_receipt(self):
+        r = self.c.post("/api/v1/receipts/nonexistent/void", headers={"X-API-Key": self.key})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(self.c.post("/api/v1/receipts/x/void").status_code, 401)
+
+
+class Migration(unittest.TestCase):
+    def test_existing_database_gets_new_column_without_losing_data(self):
+        import db as dbmod
+        cfg = make_config("m.db")
+        app = appmod.create_app(cfg)
+        client, key = register(app, "Vecchio Locale", "old@example.com")
+        r = client.post("/api/v1/receipts", headers={"X-API-Key": key}, json={
+            "items": [{"name": "Caffè", "qty": 1, "unit_price": "1.20", "vat_rate": 10}]})
+        self.assertEqual(r.status_code, 201)
+        # simula un database creato dalla versione precedente: senza la colonna
+        db = dbmod.connect(app.config)
+        db.execute("ALTER TABLE receipts DROP COLUMN voided_at")
+        db.commit()
+        self.assertNotIn("voided_at", dbmod._columns(db, "receipts"))
+        db.close()
+        dbmod.init_db(app.config)  # è ciò che succede a ogni avvio
+        dbmod.init_db(app.config)  # e deve essere ripetibile
+        db = dbmod.connect(app.config)
+        self.assertIn("voided_at", dbmod._columns(db, "receipts"))
+        n = db.execute("SELECT COUNT(*) FROM receipts WHERE voided_at IS NULL").fetchone()[0]
+        db.close()
+        self.assertEqual(n, 1)  # lo scontrino esistente è ancora lì
+
+
 if __name__ == "__main__":
     unittest.main()

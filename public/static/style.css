@@ -101,3 +101,13 @@ pre.code { background: #111713; color: #d6ecdd; padding: 14px; border-radius: 8p
   .actions, .invoice, .topbar { display: none !important; }
   .paper { box-shadow: none; border: 0; }
 }
+
+/* scontrino annullato */
+.pill.annullato { background: transparent; border: 1px solid var(--danger); color: var(--danger); cursor: default; padding: 2px 10px; }
+tr.voided td { color: var(--muted); }
+tr.voided td.num { text-decoration: line-through; }
+.void-banner { margin: 0 0 14px; padding: 10px 12px; text-align: center; font-weight: 800; letter-spacing: .08em;
+  color: var(--danger); border: 2px solid var(--danger); border-radius: 6px; }
+.void-banner span { display: block; font-weight: 400; letter-spacing: 0; font-size: .85rem; margin-top: 2px; }
+.paper.voided .items, .paper.voided .total, .paper.voided .vat { opacity: .55; }
+.paper.voided .total span:last-child { text-decoration: line-through; }

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS receipts (
     lottery_code TEXT NOT NULL DEFAULT '',
     views INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
+    voided_at TEXT,
     UNIQUE (shop_id, number),
     UNIQUE (shop_id, external_id)
 );
@@ -107,6 +108,12 @@ CREATE TABLE IF NOT EXISTS rate_hits (
 );
 CREATE INDEX IF NOT EXISTS idx_rate_hits ON rate_hits (key, ts);
 """
+
+# Colonne aggiunte dopo la prima versione: (tabella, colonna, definizione).
+# Vengono applicate ai database esistenti all'avvio, senza perdere dati.
+MIGRATIONS = [
+    ("receipts", "voided_at", "TEXT"),  # scontrino annullato
+]
 
 _TYPES = {
     "sqlite": {"PK": "INTEGER PRIMARY KEY AUTOINCREMENT", "FK": "INTEGER", "REAL": "REAL"},
@@ -233,6 +240,23 @@ def close_db(_exc=None):
         db.close()
 
 
+def _columns(db, table):
+    if db.is_pg:
+        rows = db.execute("SELECT column_name FROM information_schema.columns"
+                          " WHERE table_schema = current_schema() AND table_name = ?",
+                          (table,)).fetchall()
+        return {r[0] for r in rows}
+    return {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def migrate(db):
+    """Aggiunge le colonne mancanti (idempotente)."""
+    for table, column, ddl in MIGRATIONS:
+        if column not in _columns(db, table):
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    db.commit()
+
+
 def init_db(config):
     """Crea le tabelle se mancano (idempotente, sicuro con più istanze avviate insieme)."""
     db = connect(config)
@@ -245,6 +269,7 @@ def init_db(config):
                 if not exists:
                     db.execute(schema_for("postgres"))
                 db.commit()
+                migrate(db)
             finally:
                 db.execute("SELECT pg_advisory_unlock(727274)")
                 db.commit()
@@ -252,5 +277,6 @@ def init_db(config):
             db.execute("PRAGMA journal_mode = WAL")
             db.conn.executescript(schema_for("sqlite"))
             db.commit()
+            migrate(db)
     finally:
         db.close()

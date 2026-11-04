@@ -12,7 +12,7 @@
   {% for i in rows %}
     <tr>
       <td>{{ i.created_at|dt }}</td>
-      <td>n. {{ i.number }}<br><span class="muted small">{{ i.total_cents|euro }}</span></td>
+      <td>n. {{ i.number }}<br><span class="muted small">{{ i.total_cents|euro }}</span>{% if i.receipt_voided %}<br><span class="pill annullato">scontrino annullato</span>{% endif %}</td>
       <td><strong>{{ i.company_name }}</strong><br><span class="muted small">{{ i.address }}</span></td>
       <td class="small">{% if i.vat_number %}P.IVA {{ i.vat_number }}<br>{% endif %}{% if i.tax_code %}CF {{ i.tax_code }}{% endif %}</td>
       <td class="small">SDI: {{ i.sdi_code }}{% if i.pec %}<br>PEC: {{ i.pec }}{% endif %}<br>{{ i.email }}</td>

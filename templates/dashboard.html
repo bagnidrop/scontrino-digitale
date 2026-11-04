@@ -38,7 +38,7 @@
     <thead><tr><th>N.</th><th>Data</th><th class="num">Totale</th><th></th></tr></thead>
     <tbody>
     {% for r in recent %}
-      <tr><td>{{ r.number }}</td><td>{{ r.created_at|dt }}</td><td class="num">{{ r.total_cents|euro }}</td>
+      <tr{% if r.voided_at %} class="voided"{% endif %}><td>{{ r.number }}{% if r.voided_at %} <span class="pill annullato">annullato</span>{% endif %}</td><td>{{ r.created_at|dt }}</td><td class="num">{{ r.total_cents|euro }}</td>
         <td><a href="{{ url_for('receipt_view', token=r.token) }}" target="_blank" rel="noopener">Apri</a></td></tr>
     {% endfor %}
     </tbody>
