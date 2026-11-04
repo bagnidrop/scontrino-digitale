@@ -1,0 +1,7 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import page_head with context %}
+{% block title %}Scontrino n. {{ r.number }}{% endblock %}
+{% block content %}
+{{ page_head("Scontrino n. " ~ r.number, r.created_at|dt) }}
+<div class="card"><p>Totale {{ r.total_cents|euro }}</p></div>
+{% endblock %}

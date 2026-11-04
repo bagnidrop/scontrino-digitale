@@ -1,0 +1,53 @@
+"""Pannello del ristoratore, diviso in sezioni.
+
+Ogni sezione è un modulo con una funzione register(app, ctx). Gli helper condivisi
+(database, login, formattazione...) arrivano da `ctx`, costruito in app.create_app().
+
+REGOLA: i moduli di una sezione non importano `app` e non toccano i file delle altre sezioni.
+"""
+from flask import g, request
+
+from . import contacts, integration, invoices, messages, overview, receipts, settings, stats
+
+# Voci del menu laterale: (gruppo, [(chiave, etichetta, icona, endpoint, prefisso percorso)])
+NAV = [
+    ("Principale", [
+        ("overview", "Panoramica", "home", "dashboard", "/dashboard"),
+        ("receipts", "Scontrini", "receipt", "receipts_list", "/dashboard/receipts"),
+        ("invoices", "Fatture", "file", "invoices_list", "/dashboard/invoices"),
+        ("contacts", "Clienti", "users", "contacts_list", "/dashboard/contacts"),
+    ]),
+    ("Analisi", [
+        ("messages", "Messaggi", "message", "messages_list", "/dashboard/messages"),
+        ("stats", "Statistiche", "chart", "stats_page", "/dashboard/stats"),
+    ]),
+    ("Configurazione", [
+        ("integration", "Integrazione", "plug", "integration", "/dashboard/integration"),
+        ("settings", "Impostazioni", "settings", "settings", "/dashboard/settings"),
+    ]),
+]
+
+
+def register_all(app, ctx):
+    for module in (overview, receipts, invoices, contacts, messages, stats, integration, settings):
+        module.register(app, ctx)
+
+    @app.context_processor
+    def panel_context():
+        """Variabili per il layout del pannello (menu, contatori)."""
+        if getattr(g, "panel_shop", None) is None or not request.path.startswith("/dashboard"):
+            return {}
+        path = request.path.rstrip("/") or "/"
+        pending = ctx.get_db().execute(
+            "SELECT COUNT(*) FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
+            " WHERE r.shop_id = ? AND i.status = 'nuova' AND r.voided_at IS NULL",
+            (g.panel_shop["id"],)).fetchone()[0]
+        groups = []
+        for title, items in NAV:
+            rows = []
+            for key, label, icon, endpoint, prefix in items:
+                current = path == prefix if prefix == "/dashboard" else path.startswith(prefix)
+                rows.append({"key": key, "label": label, "icon": icon, "endpoint": endpoint,
+                             "current": current, "badge": pending if key == "invoices" and pending else 0})
+            groups.append({"title": title, "items": rows})
+        return {"panel_nav": groups, "panel_shop": g.panel_shop}

@@ -1,0 +1,7 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import page_head, empty_state with context %}
+{% block title %}Integrazione{% endblock %}
+{% block content %}
+{{ page_head("Integrazione", "Collega la cassa e gestisci la chiave API.") }}
+<div class="card">{{ empty_state("In arrivo", "Questa sezione è in costruzione.", icon_name="plug") }}</div>
+{% endblock %}

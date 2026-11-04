@@ -1,0 +1,84 @@
+{#
+  Componenti condivisi del pannello. Importali così:
+    {% from "panel/_ui.html" import icon, page_head, stat_card, link_card, badge, empty_state, pager, tabs with context %}
+  Dettagli e regole nel file DESIGN.md.
+#}
+
+{# Icona dallo sprite. name: home, receipt, file, users, message, chart, plug, settings, ... (vedi _icons.html) #}
+{% macro icon(name, size=20, cls='') -%}
+<svg class="icon {{ cls }}" width="{{ size }}" height="{{ size }}" aria-hidden="true" focusable="false"><use href="#i-{{ name }}"/></svg>
+{%- endmacro %}
+
+{# Intestazione di pagina. Le azioni a destra si passano con {% call page_head(...) %}...{% endcall %} #}
+{% macro page_head(title, subtitle='') -%}
+<div class="page-head">
+  <div>
+    <h1>{{ title }}</h1>
+    {% if subtitle %}<p class="page-sub">{{ subtitle }}</p>{% endif %}
+  </div>
+  {% if caller %}<div class="page-actions">{{ caller() }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Card statistica, TUTTA cliccabile. tone: brand | warn | danger | info | neutral #}
+{% macro stat_card(href, label, value, sub='', icon_name='', tone='neutral', hint='') -%}
+<a class="card is-link stat-card tone-{{ tone }}" href="{{ href }}">
+  <span class="stat-top">
+    <span class="stat-label">{{ label }}</span>
+    {% if icon_name %}<span class="stat-icon">{{ icon(icon_name, 18) }}</span>{% endif %}
+  </span>
+  <span class="stat-value">{{ value }}</span>
+  {% if sub %}<span class="stat-sub">{{ sub }}</span>{% endif %}
+  <span class="card-go" aria-hidden="true">{{ hint or 'Apri' }} {{ icon('chevron', 16) }}</span>
+</a>
+{%- endmacro %}
+
+{# Card-collegamento con titolo e descrizione (azioni rapide, scorciatoie), tutta cliccabile #}
+{% macro link_card(href, title, text='', icon_name='', tone='brand', external=false) -%}
+<a class="card is-link action-card tone-{{ tone }}" href="{{ href }}"{% if external %} target="_blank" rel="noopener"{% endif %}>
+  {% if icon_name %}<span class="action-icon">{{ icon(icon_name, 22) }}</span>{% endif %}
+  <span class="action-text">
+    <strong>{{ title }}</strong>
+    {% if text %}<span>{{ text }}</span>{% endif %}
+  </span>
+  <span class="card-go" aria-hidden="true">{{ icon('external' if external else 'chevron', 16) }}</span>
+</a>
+{%- endmacro %}
+
+{# Etichetta colorata. tone: ok | warn | danger | info | neutral #}
+{% macro badge(text, tone='neutral') -%}
+<span class="badge badge-{{ tone }}">{{ text }}</span>
+{%- endmacro %}
+
+{# Stato vuoto con invito all'azione #}
+{% macro empty_state(title, text='', href='', cta='', icon_name='sparkle') -%}
+<div class="empty">
+  <span class="empty-icon">{{ icon(icon_name, 28) }}</span>
+  <h3>{{ title }}</h3>
+  {% if text %}<p>{{ text }}</p>{% endif %}
+  {% if href and cta %}<a class="btn btn-primary" href="{{ href }}">{{ cta }}</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Schede di filtro. items = [(etichetta, url, attiva, conteggio_o_None), ...] #}
+{% macro tabs(items) -%}
+<nav class="tabs" aria-label="Filtri">
+  {% for label, url, active, count in items %}
+  <a class="tab{% if active %} is-active{% endif %}" href="{{ url }}"{% if active %} aria-current="page"{% endif %}>
+    {{ label }}{% if count is not none %}<span class="tab-count">{{ count }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{# Paginazione che conserva i filtri già nell'URL. endpoint = nome della route, extra = parametri fissi #}
+{% macro pager(page, pages, endpoint) -%}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pagine">
+  {% set args = request.args.to_dict() %}
+  {% if page > 1 %}<a class="btn btn-secondary btn-sm" href="{{ url_for(endpoint, **dict(args, page=page - 1)) }}">← Precedente</a>{% else %}<span></span>{% endif %}
+  <span class="muted">Pagina {{ page }} di {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-secondary btn-sm" href="{{ url_for(endpoint, **dict(args, page=page + 1)) }}">Successiva →</a>{% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}

@@ -12,6 +12,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
+from types import SimpleNamespace
 
 import segno
 from flask import (Flask, Response, abort, flash, g, jsonify, redirect,
@@ -19,6 +20,7 @@ from flask import (Flask, Response, abort, flash, g, jsonify, redirect,
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import messaging
+import sections
 from db import IntegrityError, close_db, get_db, init_db
 
 try:
@@ -262,7 +264,7 @@ def create_app(config=None):
         if not database_url:
             raise
     app.config.update(
-        DATABASE=os.path.join(instance, "scontrini.db"),
+        DATABASE=os.environ.get("DATABASE_PATH") or os.path.join(instance, "scontrini.db"),
         DATABASE_URL=database_url,
         SECRET_KEY=_secret_key(instance, on_vercel),
         PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "").rstrip("/"),
@@ -619,190 +621,14 @@ def create_app(config=None):
         session.clear()
         return redirect(url_for("index"))
 
-    # --------------------------------------------------------------------- pannello
-    @app.get("/dashboard")
-    @login_required
-    def dashboard():
-        db = get_db()
-        sid = g.panel_shop["id"]
-        midnight = datetime.now(LOCAL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        def since(days):
-            return (midnight - timedelta(days=days)).astimezone(timezone.utc).isoformat(timespec="seconds")
-
-        def agg(days):
-            row = db.execute("SELECT COUNT(*) AS c, COALESCE(SUM(total_cents),0) AS t, COALESCE(SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END),0) AS v"
-                             " FROM receipts WHERE shop_id = ? AND voided_at IS NULL AND created_at >= ?",
-                             (sid, since(days))).fetchone()
-            return dict(count=row["c"], total=row["t"], opened=row["v"])
-
-        stats = {"today": agg(0), "week": agg(6), "month": agg(29)}
-        stats["pending_invoices"] = db.execute(
-            "SELECT COUNT(*) FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
-            " WHERE r.shop_id = ? AND i.status = 'nuova' AND r.voided_at IS NULL", (sid,)).fetchone()[0]
-        stats["messages_month"] = db.execute(
-            "SELECT COUNT(*) FROM messages m JOIN receipts r ON r.id = m.receipt_id"
-            " WHERE r.shop_id = ? AND m.status = 'sent' AND m.created_at >= ?", (sid, since(29))).fetchone()[0]
-        recent = db.execute("SELECT * FROM receipts WHERE shop_id = ? ORDER BY id DESC LIMIT 5", (sid,)).fetchall()
-        base = app.config["PUBLIC_BASE_URL"] or request.host_url.rstrip("/")
-        return render_template("dashboard.html", stats=stats, recent=recent, base_url=base)
-
-    @app.get("/dashboard/receipts")
-    @login_required
-    def receipts_list():
-        db = get_db()
-        sid = g.panel_shop["id"]
-        page = max(1, request.args.get("page", 1, type=int))
-        per = 30
-        total = db.execute("SELECT COUNT(*) FROM receipts WHERE shop_id = ?", (sid,)).fetchone()[0]
-        rows = db.execute(
-            "SELECT r.*,"
-            " (SELECT COUNT(*) FROM invoice_requests i WHERE i.receipt_id = r.id) AS has_invoice,"
-            " (SELECT COUNT(*) FROM messages m WHERE m.receipt_id = r.id AND m.status = 'sent') AS sent_count"
-            " FROM receipts r WHERE r.shop_id = ? ORDER BY r.id DESC LIMIT ? OFFSET ?",
-            (sid, per, (page - 1) * per)).fetchall()
-        return render_template("receipts.html", rows=rows, page=page, pages=max(1, -(-total // per)))
-
-    def _set_voided(rid, voided):
-        db = get_db()
-        row = db.execute("SELECT id, number FROM receipts WHERE id = ? AND shop_id = ?",
-                         (rid, g.panel_shop["id"])).fetchone()
-        if row is None:
-            abort(404)
-        db.execute("UPDATE receipts SET voided_at = ? WHERE id = ?",
-                   (now_iso() if voided else None, rid))
-        db.commit()
-        flash(f"Scontrino n. {row['number']} {'annullato' if voided else 'ripristinato'}.", "ok")
-        page = request.form.get("page", 1, type=int)
-        return redirect(url_for("receipts_list", page=max(1, page)))
-
-    @app.post("/dashboard/receipts/<int:rid>/void")
-    @login_required
-    def receipt_void(rid):
-        return _set_voided(rid, True)
-
-    @app.post("/dashboard/receipts/<int:rid>/restore")
-    @login_required
-    def receipt_restore(rid):
-        return _set_voided(rid, False)
-
-    @app.get("/dashboard/invoices")
-    @login_required
-    def invoices_list():
-        return render_template("invoices.html", rows=_invoice_rows(g.panel_shop["id"]))
-
-    def _invoice_rows(sid):
-        return get_db().execute(
-            "SELECT i.*, r.number, r.total_cents, r.vat_cents, r.created_at AS receipt_date, r.token,"
-            " r.voided_at AS receipt_voided"
-            " FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
-            " WHERE r.shop_id = ? ORDER BY i.id DESC", (sid,)).fetchall()
-
-    @app.get("/dashboard/invoices.csv")
-    @login_required
-    def invoices_csv():
-        out = io.StringIO()
-        out.write("﻿")  # BOM: Excel legge correttamente gli accenti
-        w = csv.writer(out, delimiter=";")
-        w.writerow(["Data richiesta", "Scontrino n.", "Data scontrino", "Totale €", "Ragione sociale",
-                    "P.IVA", "Codice fiscale", "Codice SDI", "PEC", "Indirizzo", "Email", "Stato"])
-        for i in _invoice_rows(g.panel_shop["id"]):
-            w.writerow([csv_safe(x) for x in (
-                fmt_dt(i["created_at"]), i["number"], fmt_dt(i["receipt_date"]),
-                f"{i['total_cents'] / 100:.2f}".replace(".", ","), i["company_name"], i["vat_number"],
-                i["tax_code"], i["sdi_code"], i["pec"], i["address"], i["email"], i["status"])])
-        return Response(out.getvalue(), mimetype="text/csv; charset=utf-8",
-                        headers={"Content-Disposition": "attachment; filename=richieste-fattura.csv"})
-
-    @app.post("/dashboard/invoices/<int:inv_id>/status")
-    @login_required
-    def invoice_status(inv_id):
-        db = get_db()
-        row = db.execute("SELECT i.* FROM invoice_requests i JOIN receipts r ON r.id = i.receipt_id"
-                         " WHERE i.id = ? AND r.shop_id = ?", (inv_id, g.panel_shop["id"])).fetchone()
-        if row is None:
-            abort(404)
-        new = "evasa" if row["status"] == "nuova" else "nuova"
-        db.execute("UPDATE invoice_requests SET status = ? WHERE id = ?", (new, inv_id))
-        db.commit()
-        return redirect(url_for("invoices_list"))
-
-    @app.get("/dashboard/contacts")
-    @login_required
-    def contacts_list():
-        rows = get_db().execute("SELECT * FROM contacts WHERE shop_id = ? ORDER BY id DESC",
-                                (g.panel_shop["id"],)).fetchall()
-        return render_template("contacts.html", rows=rows)
-
-    @app.post("/dashboard/contacts/<int:cid>/delete")
-    @login_required
-    def contact_delete(cid):
-        db = get_db()
-        db.execute("DELETE FROM contacts WHERE id = ? AND shop_id = ?", (cid, g.panel_shop["id"]))
-        db.commit()
-        flash("Contatto eliminato.", "ok")
-        return redirect(url_for("contacts_list"))
-
-    @app.route("/dashboard/settings", methods=["GET", "POST"])
-    @login_required
-    def settings():
-        db = get_db()
-        sid = g.panel_shop["id"]
-        if request.method == "POST":
-            f = request.form
-            name = f.get("name", "").strip()[:80]
-            review = f.get("review_url", "").strip()[:300]
-            template = f.get("message_template", "").strip()[:300]
-            vat = re.sub(r"\s", "", f.get("vat_number", "")).upper().removeprefix("IT")
-            try:
-                window = min(30, max(0, int(f.get("invoice_window_days", 3))))
-            except ValueError:
-                window = 3
-            if not name:
-                flash("Il nome del locale è obbligatorio.", "err")
-            elif review and not review.startswith("https://"):
-                flash("Il link recensioni deve iniziare con https://", "err")
-            elif vat and not valid_piva(vat):
-                flash("La partita IVA non è valida.", "err")
-            else:
-                if "{link}" not in template:
-                    template = (template + " {link}").strip()
-                db.execute("UPDATE shops SET name=?, address=?, vat_number=?, review_url=?,"
-                           " message_template=?, footer_note=?, invoice_window_days=? WHERE id=?",
-                           (name, f.get("address", "").strip()[:200], vat, review, template,
-                            f.get("footer_note", "").strip()[:300], window, sid))
-                db.commit()
-                flash("Impostazioni salvate.", "ok")
-                return redirect(url_for("settings"))
-        new_key = session.pop("new_api_key", None)
-        base = app.config["PUBLIC_BASE_URL"] or request.host_url.rstrip("/")
-        return render_template("settings.html", new_key=new_key, base_url=base,
-                               s=db.execute("SELECT * FROM shops WHERE id = ?", (sid,)).fetchone())
-
-    @app.post("/dashboard/settings/regenerate-key")
-    @login_required
-    def regenerate_key():
-        key, key_hash, prefix = new_api_key()
-        db = get_db()
-        db.execute("UPDATE shops SET api_key_hash = ?, api_key_prefix = ? WHERE id = ?",
-                   (key_hash, prefix, g.panel_shop["id"]))
-        db.commit()
-        session["new_api_key"] = key
-        flash("Nuova API key generata: quella precedente non funziona più.", "ok")
-        return redirect(url_for("settings"))
-
-    @app.post("/dashboard/test-receipt")
-    @login_required
-    def test_receipt():
-        items = parse_items([
-            {"name": "Spaghetti alle vongole", "qty": 2, "unit_price": "14.00", "vat_rate": 10},
-            {"name": "Acqua naturale 0,75 l", "qty": 1, "unit_price": "3.00", "vat_rate": 10},
-            {"name": "Calice di vino", "qty": 2, "unit_price": "5.50", "vat_rate": 22},
-            {"name": "Coperto", "qty": 2, "unit_price": "2.00", "vat_rate": 10},
-        ])
-        row = insert_receipt(g.panel_shop["id"], items,
-                             {"payment_method": "Carta", "table_label": "Tavolo 7"})
-        return redirect(url_for("receipt_view", token=row["token"]))
+    # ------------------------------------------------------------ pannello (sezioni)
+    # Le pagine del pannello vivono in sections/: una cartella di moduli, uno per sezione.
+    sections.register_all(app, SimpleNamespace(
+        get_db=get_db, login_required=login_required, public_url=public_url, euro=euro,
+        fmt_dt=fmt_dt, fmt_qty=fmt_qty, now_iso=now_iso, now_utc=now_utc, parse_iso=parse_iso,
+        LOCAL_TZ=LOCAL_TZ, csv_safe=csv_safe, valid_piva=valid_piva, valid_email=valid_email,
+        new_api_key=new_api_key, parse_items=parse_items, insert_receipt=insert_receipt,
+        vat_breakdown=vat_breakdown, messaging=messaging))
 
     return app
 

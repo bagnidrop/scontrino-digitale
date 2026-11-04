@@ -5,32 +5,9 @@ Di default usano SQLite. Per provarli su Postgres:
 (le tabelle del database indicato vengono cancellate e ricreate)."""
 import os
 import re
-import tempfile
 import unittest
 
-_tmp = tempfile.mkdtemp()
-os.environ["OUTBOX_PATH"] = os.path.join(_tmp, "outbox.log")
-os.environ["MESSAGING_PROVIDER"] = "console"
-
-import app as appmod  # noqa: E402
-
-VALID_PIVA = "12345678903"  # cifra di controllo valida
-TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
-
-
-def make_config(name):
-    """Configurazione di prova: file SQLite temporaneo oppure Postgres pulito."""
-    if TEST_DB_URL:
-        import psycopg
-        with psycopg.connect(TEST_DB_URL, autocommit=True) as con:
-            con.execute("DROP SCHEMA public CASCADE")
-            con.execute("CREATE SCHEMA public")
-    return {"DATABASE": os.path.join(_tmp, name), "DATABASE_URL": TEST_DB_URL, "TESTING": True}
-
-
-def csrf_of(client, path="/login"):
-    html = client.get(path).get_data(as_text=True)
-    return re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+from testutil import TMP as _tmp, VALID_PIVA, appmod, csrf_of, make_config, register  # noqa: F401
 
 
 class Flow(unittest.TestCase):
@@ -163,14 +140,6 @@ class Flow(unittest.TestCase):
         new = re.search(r'id="apikey">([^<]+)<', r.get_data(as_text=True)).group(1)
         self.assertNotEqual(new, self.key)
         self.assertEqual(self.c.post("/api/v1/receipts", json={}, headers=self.hdr()).status_code, 401)
-
-
-def register(app, name, email):
-    client = app.test_client()
-    r = client.post("/register", data={"csrf": csrf_of(client, "/register"), "name": name, "email": email,
-                    "password": "password123"}, follow_redirects=True)
-    key = re.search(r'id="apikey">([^<]+)<', r.get_data(as_text=True)).group(1)
-    return client, key
 
 
 class Voiding(unittest.TestCase):
