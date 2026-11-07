@@ -1,0 +1,94 @@
+/* Statistiche: solo variabili e componenti del design system. Prefisso .st- */
+.st-stack { gap: 28px; }
+.st-period { max-width: 100%; }
+.st-range { margin: 0; }
+.section-head h2 { margin: 0; }
+.st-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0 16px 24px; }
+
+/* KPI: 5 colonne su schermo largo, 3+2 su medio, 1 su telefono */
+.st-kpis { display: grid; gap: 16px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.st-kpis > * { grid-column: span 2; }
+.st-kpis .stat-value { font-size: 1.7rem; }
+.st-insights { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.st-insights .action-text { flex: 1 1 auto; min-width: 0; }
+
+/* Grafici */
+.st-chart { max-height: 340px; }
+.st-bar-link { cursor: pointer; outline: none; }
+.st-bar-link.is-empty { cursor: default; }
+.st-hit { fill: transparent; }
+a.st-bar-link:hover .st-hit, a.st-bar-link:focus-visible .st-hit { fill: var(--brand-soft); }
+a.st-bar-link:focus-visible .st-hit { stroke: var(--brand); stroke-width: 2; }
+.st-bar-link .bar { opacity: .8; }
+.st-bar-link.is-today .bar, .st-bar-link .bar.st-best { fill: var(--accent); opacity: 1; }
+a.st-bar-link:hover .bar, a.st-bar-link:focus-visible .bar { opacity: 1; }
+.st-bar-link .bar-soft { fill: var(--line-strong); }
+.st-lbl-wd { font-size: 10px; }
+.st-val { font-weight: 700; fill: var(--ink); }
+.chart .st-prev-line, .st-prev-line { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; opacity: .55; pointer-events: none; fill: none; }
+.st-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 10px; font-size: .86rem; color: var(--muted); }
+.st-legend li { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; }
+.st-data { margin-top: 12px; }
+.st-data summary { cursor: pointer; font-weight: 600; color: var(--brand); padding: 6px 0; }
+.st-data summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.st-data .table-wrap { margin-top: 8px; max-height: 360px; overflow-y: auto; }
+
+/* Heatmap */
+.st-when { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.st-scroll { overflow-x: auto; }
+.st-heat { min-width: 420px; }
+.st-cell { fill: var(--brand); }
+.st-cell.st-l0 { fill: var(--neutral-soft); }
+.st-cell.st-l1 { opacity: .2; }
+.st-cell.st-l2 { opacity: .4; }
+.st-cell.st-l3 { opacity: .62; }
+.st-cell.st-l4 { opacity: .82; }
+.st-cell.st-l5 { opacity: 1; }
+.chart .st-cell-n { fill: var(--ink); font-size: 11px; font-weight: 600; pointer-events: none; }
+.chart .st-cell-n.is-dark { fill: var(--brand-ink); }
+.st-cell-link { cursor: pointer; outline: none; }
+.st-cell-link:hover .st-cell, .st-cell-link:focus-visible .st-cell { stroke: var(--ink); stroke-width: 2; }
+
+/* Pagamenti */
+.st-pay { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.st-pay-card { display: flex; flex-direction: column; gap: 8px; }
+.st-pay-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.st-pay-pct { font-size: 1.5rem; font-weight: 780; font-variant-numeric: tabular-nums; }
+.st-meter { width: 100%; height: 8px; display: block; }
+.st-pay-card .card-go { margin-top: 4px; }
+
+/* Piatti */
+.st-dishes { display: grid; gap: 12px; }
+.st-dishes li { padding: 0; border: 0; }
+.st-dish-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.st-dish-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.st-dish-bar { width: 100%; height: 6px; display: block; margin-top: 5px; }
+
+/* IVA */
+.st-vat tfoot th, .st-vat tfoot td { font-weight: 750; border-top: 2px solid var(--line-strong); }
+.st-vat th[scope="row"] { text-align: left; font-weight: 650; padding: 13px 16px; }
+
+@media (max-width: 1180px) { .st-kpis > :nth-child(n+4) { grid-column: span 3; } }
+@media (min-width: 1181px) { .st-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } .st-kpis > * { grid-column: auto; } }
+@media (max-width: 960px) { .st-when, .st-top { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .st-kpis { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .st-kpis > * { grid-column: auto !important; }
+  .st-kpis .stat-card { min-height: 0; }
+  .st-chart text { font-size: 19px; }
+  .st-chart .st-lbl-wd { font-size: 16px; }
+  .st-week text { font-size: 13px; }
+  .st-heat { min-width: 0; }
+  .st-heat text { font-size: 15px; }
+  .chart .st-cell-n { font-size: 14px; }
+  .st-dish-top { flex-direction: column; gap: 2px; }
+}
+
+/* Barre SVG fuori da .chart: colori da variabili */
+.st-meter .bar, .st-dish-bar .bar, .st-legend .bar { fill: var(--brand); }
+.st-meter .bar-soft, .st-dish-bar .bar-soft { fill: var(--brand-soft); }
+.st-legend .st-prev-line { stroke: var(--ink); }
+
+.st-dish-link { display: block; color: inherit; text-decoration: none; padding: 6px 8px; margin: -6px -8px; border-radius: var(--radius-sm); }
+.st-dish-link:hover { background: var(--surface-2); color: inherit; }
+.st-dish-link:focus-visible { box-shadow: var(--focus); outline: none; }

@@ -1,0 +1,71 @@
+/* Panoramica: solo variabili e componenti del design system. Prefisso .ov- */
+.ov-stack { gap: 28px; }
+.ov-period { max-width: 100%; }
+.ov-stats { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ov-todo { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.ov-shortcuts { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.ov-shortcuts form { display: flex; }
+.ov-shortcuts form .card { flex: 1; width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.ov-shortcuts .action-text, .ov-todo .action-text { flex: 1 1 auto; }
+.ov-todo .callout { grid-column: 1 / -1; }
+.section-head h2 { margin: 0; }
+
+/* Grafico */
+.ov-chart { max-height: 340px; }
+.ov-chart .ov-lbl { font-size: 11px; }
+.ov-chart .ov-lbl-wd { font-size: 10px; }
+.ov-bar-link { cursor: pointer; outline: none; }
+.ov-hit { fill: transparent; }
+.ov-bar-link:hover .ov-hit, .ov-bar-link:focus-visible .ov-hit { fill: var(--brand-soft); }
+.ov-bar-link:focus-visible .ov-hit { stroke: var(--brand); stroke-width: 2; }
+.ov-bar-link .bar { opacity: .75; }
+.ov-bar-link.is-today .bar { fill: var(--accent); opacity: 1; }
+.ov-bar-link.is-today .ov-lbl { fill: var(--ink); font-weight: 700; }
+.ov-bar-link:hover .bar, .ov-bar-link:focus-visible .bar { opacity: 1; }
+.ov-bar-link .bar-soft { fill: var(--line-strong); }
+.ov-prev { fill: var(--ink); }
+.ov-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 10px; font-size: .9rem; }
+.ov-legend li { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; }
+.ov-legend .bar { fill: var(--brand); }
+.ov-legend svg { flex: none; }
+.ov-data { margin-top: 12px; }
+.ov-data summary { cursor: pointer; font-weight: 600; color: var(--brand); padding: 6px 0; }
+.ov-data summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.ov-data .table-wrap { margin-top: 8px; max-height: 360px; overflow-y: auto; }
+
+/* Checklist di avvio */
+.ov-welcome { display: flex; gap: 18px; align-items: flex-start; }
+.ov-welcome .empty-icon { flex: none; margin: 0; }
+.ov-welcome h2 { margin-bottom: 4px; }
+.ov-progress { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.ov-progress progress { max-width: 260px; accent-color: var(--brand); }
+.ov-steps { display: grid; gap: 12px; }
+.ov-steps li { padding: 0; border: 0; }
+.ov-steps form { display: flex; }
+.ov-step { width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.ov-step.is-done { background: var(--surface-2); }
+.ov-step .badge { flex: none; }
+.ov-step-n { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; font-weight: 750;
+  background: var(--brand-soft); color: var(--brand); border: 2px solid var(--brand); }
+.ov-step-n.is-done { background: var(--brand); color: var(--brand-ink); }
+.ov-step .action-text { flex: 1 1 auto; }
+
+@media (max-width: 960px) { .ov-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .ov-stats { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ov-stats .stat-card { min-height: 0; }
+  .ov-todo, .ov-shortcuts { grid-template-columns: minmax(0, 1fr); }
+  .ov-hide-sm { display: none; }
+  .ov-chart .ov-lbl { font-size: 19px; }
+  .ov-chart .ov-lbl-wd { font-size: 16px; }
+  .ov-chart .ov-lbl-alt { display: none; }
+  .ov-chart text { font-size: 19px; }
+  .ov-welcome { flex-direction: column; gap: 10px; }
+  .ov-step .badge { display: none; }
+}
+
+/* tap-target comodi su telefono e tablet */
+@media (max-width: 820px) { main .btn, main .tab { min-height: 44px; } }
+@media (max-width: 820px) {
+  .section-head a, main .card-head .card-go { display: inline-flex; align-items: center; min-height: 44px; }
+}

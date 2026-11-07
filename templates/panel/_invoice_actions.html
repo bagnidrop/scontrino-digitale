@@ -1,0 +1,20 @@
+{# Pulsanti di una richiesta di fattura: cambio stato + copia dati. Usato da elenco e dettaglio. #}
+{% macro actions(i, next_url, size='btn-sm') %}
+<div class="row-actions inv-actions">
+  <button class="btn btn-secondary {{ size }}" type="button" data-copy="#cp-{{ i.id }}" title="Copia i dati di fatturazione negli appunti">Copia dati</button>
+  {% if i.status == 'nuova' and i.voided %}
+    <span class="badge badge-danger">Non evadere</span>
+  {% else %}
+  <form method="post" action="{{ url_for('invoice_status', inv_id=i.id) }}" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    {% if i.status == 'nuova' %}
+      <button class="btn btn-primary {{ size }}" type="submit">Segna come evasa</button>
+    {% else %}
+      <button class="btn btn-ghost {{ size }}" type="submit">Riapri</button>
+    {% endif %}
+  </form>
+  {% endif %}
+</div>
+<pre class="inv-copy" id="cp-{{ i.id }}" hidden>{{ i.copy_text }}</pre>
+{% endmacro %}

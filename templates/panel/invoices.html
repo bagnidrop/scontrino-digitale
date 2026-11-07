@@ -1,0 +1,83 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, badge, empty_state, tabs with context %}
+{% from "panel/_invoice_actions.html" import actions with context %}
+{% block title %}Fatture{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-invoices.css') }}">{% endblock %}
+{% block content %}
+  {% call page_head("Fatture", "I clienti che hanno chiesto la fattura dallo scontrino digitale. Controlla i dati, emetti la fattura e segnala che l'hai fatta.") %}
+    <a class="btn btn-secondary" href="{{ url_for('invoices_csv') }}">{{ icon('download', 16) }} Esporta CSV</a>
+  {% endcall %}
+
+  {% if counts.all == 0 and not q %}
+    <div class="card">{{ empty_state("Nessuna richiesta di fattura per ora", "Quando un cliente apre il suo scontrino digitale e tocca «Richiedi fattura», i suoi dati fiscali compaiono qui. Prova da uno scontrino di prova.", url_for('receipts_list'), "Vai agli scontrini", "file") }}</div>
+  {% else %}
+  <div class="stack">
+    <div class="grid cols-3">
+      {{ stat_card(url_for('invoices_list', status='nuova', q=q or None), "Da evadere", counts.nuova, "richieste in attesa", "clock", "warn", "Mostra") }}
+      {{ stat_card(url_for('invoices_list', status='evasa', q=q or None), "Evase", counts.evasa, "fatture già emesse", "check", "brand", "Mostra") }}
+      {{ stat_card(url_for('invoices_list', status='nuova', q=q or None), "Importo da fatturare", todo_total|euro, "somma degli scontrini da evadere", "wallet", "info", "Mostra") }}
+    </div>
+
+    {% if counts.void and status != 'void' %}
+    <a class="callout warn inv-void-note" href="{{ url_for('invoices_list', status='void', q=q or None) }}">
+      {{ icon('alert', 20) }}
+      <span><strong>{{ counts.void }} {{ 'richiesta riguarda' if counts.void == 1 else 'richieste riguardano' }} scontrini annullati.</strong> Non vanno evase: non le conto tra quelle da evadere. Tocca per vederle.</span>
+    </a>
+    {% endif %}
+
+    <div class="toolbar">
+      {{ tabs([
+        ("Da evadere", url_for('invoices_list', status='nuova', q=q or None), status == 'nuova', counts.nuova),
+        ("Evase", url_for('invoices_list', status='evasa', q=q or None), status == 'evasa', counts.evasa),
+        ("Tutte", url_for('invoices_list', q=q or None), status == 'all', counts.all)]
+        + ([("Scontrino annullato", url_for('invoices_list', status='void', q=q or None), status == 'void', counts.void)] if counts.void else [])) }}
+      <form method="get" action="{{ url_for('invoices_list') }}" role="search">
+        {% if status != 'all' %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+        <label class="sr-only" for="inv-q">Cerca una richiesta</label>
+        <input class="input" id="inv-q" type="search" name="q" value="{{ q }}" placeholder="Ragione sociale, P.IVA, email…">
+        <button class="btn btn-secondary" type="submit">{{ icon('search', 16) }} Cerca</button>
+        {% if q %}<a class="btn btn-ghost" href="{{ url_for('invoices_list', status=status if status != 'all' else None) }}">Azzera</a>{% endif %}
+      </form>
+    </div>
+
+    <div class="card flush">
+      {% if rows %}
+      <div class="table-wrap">
+        <table class="table inv-table">
+          <thead><tr><th>Cliente</th><th>Dati fiscali</th><th>Invio fattura</th><th>Scontrino</th><th>Richiesta</th><th>Stato</th><th><span class="sr-only">Azioni</span></th></tr></thead>
+          <tbody>
+          {% for i in rows %}
+            <tr data-href="{{ url_for('invoice_detail', inv_id=i.id) }}"{% if i.voided %} class="is-void"{% endif %}>
+              <td class="inv-client">
+                <a href="{{ url_for('invoice_detail', inv_id=i.id) }}"><strong>{{ i.company_name }}</strong></a>
+                <span class="cell-sub">{{ i.address }}</span>
+              </td>
+              <td data-label="Dati fiscali">
+                {% if i.vat_number %}<span class="nowrap">P.IVA <span class="mono">{{ i.vat_number }}</span></span>{% endif %}
+                {% if i.tax_code %}<span class="cell-sub nowrap">CF <span class="mono">{{ i.tax_code }}</span></span>{% endif %}
+              </td>
+              <td data-label="Invio fattura">
+                <span class="nowrap">SDI <span class="mono">{{ i.sdi_code }}</span></span>
+                {% if i.pec %}<span class="cell-sub">PEC {{ i.pec }}</span>{% endif %}
+                <span class="cell-sub">{{ i.email }}</span>
+              </td>
+              <td data-label="Scontrino" class="nowrap">
+                <a href="{{ url_for('receipt_detail', rid=i.rid) }}">n. {{ i.number }}</a>
+                <span class="cell-sub">{{ i.total_cents|euro }}</span>
+                {% if i.voided %}{{ badge("scontrino annullato", "danger") }}{% endif %}
+              </td>
+              <td data-label="Richiesta" class="nowrap">{{ i.created_at|dt }}</td>
+              <td data-label="Stato">{% if i.status == 'evasa' %}{{ badge("Evasa", "ok") }}{% else %}{{ badge("Da evadere", "warn") }}{% endif %}</td>
+              <td>{{ actions(i, request.full_path.rstrip('?')) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        {{ empty_state("Nessuna richiesta trovata", ("Nessun risultato per «" ~ q ~ "». Controlla come l'hai scritto.") if q else ("Qui non c'è niente: ottimo lavoro!" if status == 'nuova' else "Non ci sono richieste in questo elenco."), url_for('invoices_list'), "Mostra tutte", "search") }}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

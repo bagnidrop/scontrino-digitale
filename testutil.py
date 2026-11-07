@@ -19,13 +19,19 @@ TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
 
 
 def make_config(name):
-    """Configurazione di prova: file SQLite temporaneo oppure Postgres pulito."""
+    """Configurazione di prova: file SQLite temporaneo, oppure uno schema Postgres dedicato e pulito.
+
+    Su Postgres ogni `name` ha il suo schema (t_<name>), così i moduli di test, che creano l'app
+    al momento dell'importazione, non si cancellano i dati a vicenda."""
+    url = ""
     if TEST_DB_URL:
         import psycopg
+        schema = "t_" + re.sub(r"\W", "_", name)
         with psycopg.connect(TEST_DB_URL, autocommit=True) as con:
-            con.execute("DROP SCHEMA public CASCADE")
-            con.execute("CREATE SCHEMA public")
-    return {"DATABASE": os.path.join(TMP, name), "DATABASE_URL": TEST_DB_URL, "TESTING": True}
+            con.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+            con.execute(f"CREATE SCHEMA {schema}")
+        url = TEST_DB_URL + ("&" if "?" in TEST_DB_URL else "?") + f"options=-csearch_path%3D{schema}"
+    return {"DATABASE": os.path.join(TMP, name), "DATABASE_URL": url, "TESTING": True}
 
 
 def csrf_of(client, path="/login"):

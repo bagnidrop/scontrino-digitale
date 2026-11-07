@@ -1,0 +1,102 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, badge, empty_state, tabs, pager with context %}
+{% block title %}Scontrini{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-receipts.css') }}">{% endblock %}
+{% block content %}
+{% call page_head("Scontrini", "Tutti gli scontrini emessi dal locale: cerca, filtra e apri il dettaglio.") %}
+  <a class="btn btn-secondary" href="{{ export_url }}">{{ icon('download', 16) }} Esporta CSV</a>
+{% endcall %}
+
+<div class="stack">
+  <section class="grid cols-3" aria-label="Riepilogo dei risultati">
+    {{ stat_card(status_tabs[1][1], "Incassato", income|euro,
+                 "Scontrini validi nei filtri attuali", "wallet", "brand", "Vedi i validi") }}
+    {{ stat_card(status_tabs[0][1], "Scontrini", count, "Tutti, anche annullati" if f.status == 'all' else "Nei filtri attuali", "receipt", "neutral", "Vedi tutti") }}
+    {{ stat_card(status_tabs[2][1], "Annullati", status_tabs[2][3], "Non contano negli incassi", "x", "danger" if status_tabs[2][3] else "neutral", "Vedi gli annullati") }}
+  </section>
+
+  <div class="card rc-filters">
+    {{ tabs(status_tabs) }}
+    <form class="rc-form" method="get" action="{{ url_for('receipts_list') }}" role="search">
+      {% if hidden_status %}<input type="hidden" name="status" value="{{ hidden_status }}">{% endif %}
+      {% if f.day %}<input type="hidden" name="day" value="{{ f.day }}">{% endif %}
+      <label class="field rc-q"><span class="sr-only">Cerca per numero o tavolo</span>
+        <input class="input" type="search" name="q" value="{{ f.q }}" placeholder="Numero, tavolo o piatto…" aria-label="Cerca per numero, tavolo o piatto">
+      </label>
+      <label class="field"><span class="sr-only">Periodo</span>
+        <select class="select" name="period" data-autosubmit aria-label="Periodo"{% if f.day %} disabled{% endif %}>
+          {% for k, lab in period_labels.items() %}<option value="{{ k }}"{% if f.period == k %} selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field"><span class="sr-only">Metodo di pagamento</span>
+        <select class="select" name="payment" data-autosubmit aria-label="Metodo di pagamento">
+          <option value="">Tutti i pagamenti</option>
+          {% for p in payments %}<option value="{{ p }}"{% if f.payment == p %} selected{% endif %}>{{ p }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">{{ icon('search', 16) }} Cerca</button>
+    </form>
+    {% if chips %}
+    <div class="rc-chips" aria-label="Filtri attivi">
+      {% for label, url in chips %}<a class="rc-chip" href="{{ url }}" title="Togli questo filtro">{{ label }} {{ icon('x', 14) }}<span class="sr-only">Togli filtro</span></a>{% endfor %}
+      <a class="rc-clear" href="{{ clear_url }}">Azzera tutto</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if rows %}
+  <div class="card flush">
+    <div class="table-wrap">
+      <table class="table rc-table">
+        <caption class="sr-only">Elenco scontrini</caption>
+        <thead><tr>
+          <th scope="col">Scontrino</th><th scope="col">Data</th><th scope="col">Pagamento</th>
+          <th scope="col" class="num">Totale</th><th scope="col">Cliente</th><th scope="col"><span class="sr-only">Azioni</span></th>
+        </tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr data-href="{{ url_for('receipt_detail', rid=r.id) }}"{% if r.voided_at %} class="is-void"{% endif %}>
+          <td>
+            <a class="rc-num" href="{{ url_for('receipt_detail', rid=r.id) }}">n. {{ r.number }}</a>
+            {% if r.voided_at %}{{ badge('annullato', 'danger') }}{% endif %}
+            <span class="cell-sub">{{ r.table_label or 'Senza tavolo' }}</span>
+          </td>
+          <td class="nowrap">{{ r.created_at|dt }}</td>
+          <td>{{ r.payment_method or '–' }}</td>
+          <td class="num">{{ r.total_cents|euro }}</td>
+          <td class="rc-flags">
+            {% if r.views %}<span class="rc-flag" title="Aperto dal cliente">{{ icon('eye', 14) }} {{ r.views }}</span>{% endif %}
+            {% if r.sent_count %}<span class="rc-flag" title="Messaggi inviati">{{ icon('send', 14) }} {{ r.sent_count }}</span>{% endif %}
+            {% if r.has_invoice %}<span class="rc-flag" title="Richiesta di fattura">{{ icon('file', 14) }} Fattura</span>{% endif %}
+            {% if not (r.views or r.sent_count or r.has_invoice) %}<span class="muted">–</span>{% endif %}
+          </td>
+          <td>
+            <div class="row-actions">
+              {% if r.voided_at %}
+              <form class="inline" method="post" action="{{ url_for('receipt_restore', rid=r.id) }}">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="next" value="{{ return_to }}">
+                <button class="btn btn-secondary btn-sm" type="submit">{{ icon('undo', 14) }} Ripristina</button>
+              </form>
+              {% else %}
+              <a class="btn btn-ghost btn-sm" href="{{ url_for('receipt_view', token=r.token) }}" target="_blank" rel="noopener">{{ icon('external', 14) }} Pagina cliente</a>
+              <form class="inline" method="post" action="{{ url_for('receipt_void', rid=r.id) }}" data-confirm="Annullare lo scontrino n. {{ r.number }}? Non conterà più negli incassi.">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="next" value="{{ return_to }}">
+                <button class="btn btn-danger btn-sm" type="submit">{{ icon('x', 14) }} Annulla</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{ pager(page, pages, 'receipts_list') }}
+  {% elif total_any == 0 %}
+  <div class="card">{{ empty_state("Ancora nessuno scontrino", "Appena la cassa invia il primo scontrino lo trovi qui. Intanto puoi crearne uno di prova dal pulsante in alto.", url_for('integration'), "Collega la cassa", "receipt") }}</div>
+  {% else %}
+  <div class="card">{{ empty_state("Nessuno scontrino con questi filtri", "Prova a togliere qualche filtro o a cercare un altro numero.", clear_url, "Azzera i filtri", "search") }}</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,7 +1,79 @@
 {% extends "panel/base.html" %}
-{% from "panel/_ui.html" import page_head, empty_state with context %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, badge, empty_state, tabs, pager with context %}
 {% block title %}Messaggi{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-messages.css') }}">{% endblock %}
 {% block content %}
-{{ page_head("Messaggi", "Storico degli scontrini inviati su WhatsApp e SMS.") }}
-<div class="card">{{ empty_state("In arrivo", "Questa sezione è in costruzione.", icon_name="message") }}</div>
+  {% set st = status if status != 'all' else None %}
+  {% set ch = channel if channel != 'all' else None %}
+  {% call page_head("Messaggi", "Il registro degli scontrini che hai inviato ai clienti su WhatsApp e SMS. Per la privacy i numeri sono nascosti in parte.") %}
+    <a class="btn btn-secondary" href="{{ url_for('integration') }}">{{ icon('plug', 16) }} Come inviare</a>
+  {% endcall %}
+
+  <div class="stack">
+    <div class="grid cols-4">
+      {{ stat_card(url_for('messages_list', period=period, status='sent', channel=ch), "Inviati", counts.sent, "arrivati al servizio di invio", "check", "brand", "Mostra") }}
+      {{ stat_card(url_for('messages_list', period=period, status='failed', channel=ch), "Non partiti", counts.failed, "da controllare" if counts.failed else "tutto a posto", "alert", "danger" if counts.failed else "neutral", "Mostra") }}
+      {{ stat_card(url_for('messages_list', period=period, status=st, channel='whatsapp'), "WhatsApp", counts.whatsapp, "messaggi nel periodo", "message", "info", "Mostra") }}
+      {{ stat_card(url_for('messages_list', period=period, status=st, channel='sms'), "SMS", counts.sms, "messaggi nel periodo", "phone", "neutral", "Mostra") }}
+    </div>
+
+    {% if counts.failed and status != 'failed' %}
+    <a class="callout warn msg-note" href="{{ url_for('messages_list', period=period, status='failed', channel=ch) }}">
+      {{ icon('alert', 20) }}
+      <span><strong>{{ counts.failed }} {{ 'messaggio non è partito' if counts.failed == 1 else 'messaggi non sono partiti' }}.</strong> Tocca per vedere perché e come rimediare.</span>
+    </a>
+    {% endif %}
+
+    <div class="toolbar">
+      {% set ptabs = [] %}{% for p in periods %}{% set _ = ptabs.append((period_labels[p], url_for('messages_list', period=p, status=st, channel=ch), period == p, None)) %}{% endfor %}
+      {{ tabs(ptabs) }}
+    </div>
+    <div class="toolbar">
+      {{ tabs([
+        ("Tutti", url_for('messages_list', period=period, channel=ch), status == 'all', None),
+        ("Inviati", url_for('messages_list', period=period, status='sent', channel=ch), status == 'sent', None),
+        ("Non partiti", url_for('messages_list', period=period, status='failed', channel=ch), status == 'failed', None)]) }}
+      <form method="get" action="{{ url_for('messages_list') }}">
+        <input type="hidden" name="period" value="{{ period }}">
+        {% if st %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+        <label for="msg-ch" class="muted">Canale</label>
+        <select class="select" id="msg-ch" name="channel" data-autosubmit>
+          <option value="all"{% if channel == 'all' %} selected{% endif %}>Tutti</option>
+          <option value="whatsapp"{% if channel == 'whatsapp' %} selected{% endif %}>WhatsApp</option>
+          <option value="sms"{% if channel == 'sms' %} selected{% endif %}>SMS</option>
+        </select>
+        <noscript><button class="btn btn-secondary" type="submit">Applica</button></noscript>
+      </form>
+    </div>
+
+    <div class="card flush">
+      {% if rows %}
+      <div class="table-wrap">
+        <table class="table msg-table">
+          <thead><tr><th>Data</th><th>Canale</th><th>Numero</th><th>Esito</th><th>Scontrino</th></tr></thead>
+          <tbody>
+          {% for m in rows %}
+            <tr data-href="{{ url_for('receipt_detail', rid=m.rid) }}"{% if m.status != 'sent' %} class="msg-failed"{% endif %}>
+              <td class="nowrap"><a href="{{ url_for('receipt_detail', rid=m.rid) }}">{{ m.created_at|dt }}</a></td>
+              <td class="nowrap">{{ icon('message' if m.channel == 'whatsapp' else 'phone', 16, 'msg-ico') }} {{ 'WhatsApp' if m.channel == 'whatsapp' else 'SMS' }}</td>
+              <td class="mono nowrap">{{ m.phone }}</td>
+              <td class="msg-result">
+                {% if m.status == 'sent' %}{{ badge("Inviato", "ok") }}{% else %}{{ badge("Non partito", "danger") }}
+                <span class="cell-sub msg-why">{{ m.why }}</span>
+                {% if m.error %}<span class="cell-sub msg-tech" title="Dettaglio tecnico, utile se chiedi assistenza">Dettaglio: {{ m.error }}</span>{% endif %}{% endif %}
+              </td>
+              <td class="nowrap">n. {{ m.number }}{% if m.voided %} {{ badge("annullato", "danger") }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% elif total %}
+        {{ empty_state("Nessun messaggio con questi filtri", "Cambia periodo, esito o canale per vedere gli altri invii.", url_for('messages_list', period=period), "Togli i filtri", "filter") }}
+      {% else %}
+        {{ empty_state("Nessun messaggio in questo periodo", "Quando mandi lo scontrino a un cliente su WhatsApp o SMS, lo trovi qui con l'esito dell'invio." ~ ("" if period == 'all' else " Prova a guardare un periodo più lungo."), url_for('messages_list', period='all') if period != 'all' else url_for('integration'), "Guarda tutto il registro" if period != 'all' else "Scopri come inviare", "message") }}
+      {% endif %}
+    </div>
+    {{ pager(page, pages, 'messages_list') }}
+  </div>
 {% endblock %}

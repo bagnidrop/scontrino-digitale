@@ -1,7 +1,137 @@
 {% extends "panel/base.html" %}
-{% from "panel/_ui.html" import page_head with context %}
+{% from "panel/_ui.html" import icon, page_head, link_card, stat_card, badge with context %}
 {% block title %}Scontrino n. {{ r.number }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-receipts.css') }}">{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='panel-receipts.js') }}" defer></script>{% endblock %}
 {% block content %}
-{{ page_head("Scontrino n. " ~ r.number, r.created_at|dt) }}
-<div class="card"><p>Totale {{ r.total_cents|euro }}</p></div>
+<p class="small rc-noprint"><a href="{{ url_for('receipts_list') }}">← Tutti gli scontrini</a></p>
+{% call page_head("Scontrino n. " ~ r.number, (r.created_at|dt) ~ (" · " ~ r.table_label if r.table_label else "")) %}
+  <a class="btn btn-secondary" href="{{ url_for('receipt_view', token=r.token) }}" target="_blank" rel="noopener">{{ icon('external', 16) }} Pagina del cliente</a>
+  <button class="btn btn-secondary" type="button" data-print>{{ icon('printer', 16) }} Stampa</button>
+  {% if r.voided_at %}
+  <form class="inline" method="post" action="{{ url_for('receipt_restore', rid=r.id) }}" data-confirm="Ripristinare lo scontrino n. {{ r.number }}? Tornerà a contare negli incassi.">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="next" value="{{ return_to }}">
+    <button class="btn btn-primary" type="submit">{{ icon('undo', 16) }} Ripristina</button>
+  </form>
+  {% else %}
+  <form class="inline" method="post" action="{{ url_for('receipt_void', rid=r.id) }}" data-confirm="Annullare lo scontrino n. {{ r.number }}? Non conterà più negli incassi.">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="next" value="{{ return_to }}">
+    <button class="btn btn-danger" type="submit">{{ icon('x', 16) }} Annulla scontrino</button>
+  </form>
+  {% endif %}
+{% endcall %}
+
+<div class="stack">
+  {% if r.voided_at %}
+  <div class="callout warn" role="note">{{ icon('alert', 20) }}<div><strong>Scontrino annullato il {{ r.voided_at|dt }}.</strong> Non conta negli incassi e il cliente vede «Scontrino annullato». Puoi ripristinarlo quando vuoi.</div></div>
+  {% endif %}
+
+  <a class="card is-link rc-hero" href="{{ link }}" target="_blank" rel="noopener" aria-label="Apri lo scontrino n. {{ r.number }} come lo vede il cliente">
+    <div>
+      <div class="rc-total{% if r.voided_at %} is-void{% endif %}">{{ r.total_cents|euro }}</div>
+      <div class="rc-hero-meta">
+        {% if r.voided_at %}{{ badge('annullato', 'danger') }}{% else %}{{ badge('valido', 'ok') }}{% endif %}
+        <span>{{ icon('wallet', 16) }} {{ r.payment_method or 'Pagamento non indicato' }}</span>
+        <span>IVA {{ vat_total|euro }}</span>
+        {% if r.lottery_code %}<span>Lotteria <span class="mono">{{ r.lottery_code }}</span></span>{% endif %}
+      </div>
+    </div>
+    <div class="rc-hero-side">
+      <img class="rc-qr" src="{{ qr_url }}" width="132" height="132" alt="QR code dello scontrino n. {{ r.number }}">
+      <span class="small muted nowrap">{{ icon('external', 14) }} Apri come lo vede il cliente</span>
+    </div>
+  </a>
+
+  <div class="grid split">
+    <div class="stack">
+      <div class="card flush">
+        <div class="card-head rc-items-head"><h2>Cosa è stato ordinato</h2></div>
+        <div class="table-wrap">
+          <table class="table rc-items">
+            <thead><tr><th scope="col">Articolo</th><th scope="col" class="num">Q.tà</th><th scope="col" class="num">Prezzo</th><th scope="col" class="num">Totale</th></tr></thead>
+            <tbody>
+            {% for it in items %}
+              <tr><td>{{ it.name }}<span class="cell-sub">IVA {{ it.vat_rate|qty }}%</span></td><td class="num">{{ it.qty|qty }}</td><td class="num">{{ it.unit_price_cents|euro }}</td><td class="num">{{ it.line_total_cents|euro }}</td></tr>
+            {% endfor %}
+            </tbody>
+            <tfoot><tr><th scope="row" colspan="3" class="num">Totale</th><td class="num"><strong>{{ r.total_cents|euro }}</strong></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card flush">
+        <div class="card-head"><h2>Riepilogo IVA</h2></div>
+        <div class="table-wrap">
+          <table class="table rc-vat">
+            <thead><tr><th scope="col">Aliquota</th><th scope="col" class="num">Imponibile</th><th scope="col" class="num">IVA</th><th scope="col" class="num">Totale</th></tr></thead>
+            <tbody>
+            {% for v in vat_rows %}
+              <tr><td>{{ v.rate|qty }}%</td><td class="num">{{ v.net|euro }}</td><td class="num">{{ v.vat|euro }}</td><td class="num">{{ v.gross|euro }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Cronologia</h2></div>
+        <ol class="rc-timeline">
+          {% for e in events %}
+          <li>
+            <span class="rc-dot {{ e.kind }}">{{ icon(e.icon, 18) }}</span>
+            <div class="rc-ev">
+              <strong>{% if e.href %}<a href="{{ e.href }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}</strong>
+              <span class="muted">{{ e.text }}</span>
+              {% if not e.no_time %}<br><time datetime="{{ e.at }}">{{ e.at|dt }}</time>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+    </div>
+
+    <div class="stack rc-noprint">
+      <div class="card" id="invia">
+        <div class="card-head"><h2>Invia al cliente</h2><span class="small muted">{% if sends_left %}Ancora {{ sends_left }} {{ 'invio' if sends_left == 1 else 'invii' }}{% else %}Invii finiti{% endif %}</span></div>
+        {% if r.voided_at %}
+          <p class="muted">Lo scontrino è annullato: ripristinalo per poterlo inviare.</p>
+        {% elif sends_left <= 0 %}
+          <p class="muted">Hai usato tutti gli invii per questo scontrino. Il cliente può aprire il link o il QR.</p>
+        {% else %}
+        <form class="rc-send" method="post" action="{{ url_for('receipt_send', rid=r.id) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <label class="field">Numero di telefono
+            <input class="input" type="tel" name="phone" inputmode="tel" autocomplete="off" placeholder="333 1234567" required>
+          </label>
+          <div class="rc-radios" role="radiogroup" aria-label="Canale">
+            <label><input type="radio" name="channel" value="whatsapp" checked> WhatsApp</label>
+            <label><input type="radio" name="channel" value="sms"> SMS</label>
+          </div>
+          <label class="rc-check"><input type="checkbox" name="marketing_consent" value="1"> Il cliente accetta di ricevere offerte: salva il numero tra i clienti.</label>
+          <button class="btn btn-primary btn-block" type="submit">{{ icon('send', 16) }} Invia scontrino</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Link per il cliente</h2></div>
+        <div class="rc-linkbox">
+          <span class="mono" id="rc-link">{{ link }}</span>
+          <button class="btn btn-secondary btn-sm" type="button" data-copy="#rc-link">{{ icon('copy', 14) }} Copia</button>
+        </div>
+      </div>
+
+      {% if inv %}
+      {{ link_card(url_for('invoice_detail', inv_id=inv.id), "Richiesta di fattura", inv.company_name ~ " · " ~ inv.status, "file", "warn" if inv.status == 'nuova' else "brand") }}
+      {% endif %}
+      {{ link_card(url_for('messages_list'), "Messaggi inviati", (sent_ok ~ " inviati su " ~ msgs|length) if msgs else "Nessun invio per questo scontrino", "message", "info") }}
+      {{ link_card(day_url, "Scontrini dello stesso giorno", day_label, "calendar", "neutral") }}
+    </div>
+  </div>
+
+  <nav class="rc-pn rc-noprint" aria-label="Altri scontrini">
+    {% if prev_r %}<a class="btn btn-secondary btn-sm" href="{{ url_for('receipt_detail', rid=prev_r.id) }}">← n. {{ prev_r.number }}</a>{% else %}<span></span>{% endif %}
+    {% if next_r %}<a class="btn btn-secondary btn-sm" href="{{ url_for('receipt_detail', rid=next_r.id) }}">n. {{ next_r.number }} →</a>{% endif %}
+  </nav>
+</div>
 {% endblock %}

@@ -1,0 +1,84 @@
+/* Sezione Scontrini (prefisso .rc-) */
+.rc-filters { display: flex; flex-direction: column; gap: 14px; }
+.rc-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.rc-form .field { flex: none; }
+.rc-form .rc-q { flex: 1 1 220px; }
+.rc-form .select { min-width: 170px; }
+.rc-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 12px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-size: .84rem; font-weight: 650; text-decoration: none; }
+.rc-chip:hover { background: var(--neutral-soft); color: var(--ink); }
+.rc-clear { font-size: .84rem; font-weight: 600; }
+.rc-num { font-weight: 700; margin-right: 6px; text-decoration: none; }
+.rc-num:hover { text-decoration: underline; }
+.rc-flags { white-space: nowrap; }
+.rc-flag { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; color: var(--muted); font-size: .86rem; }
+.rc-table .row-actions { flex-wrap: nowrap; }
+
+/* Dettaglio */
+.card.flush > .card-head { padding: 16px 18px 12px; margin: 0; }
+.rc-check input { width: 20px; height: 20px; flex: none; }
+.rc-check { min-height: 44px; align-items: center; }
+.rc-hero { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.rc-total { font-size: 2.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rc-total.is-void { text-decoration: line-through; color: var(--muted); }
+.rc-hero-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; color: var(--muted); }
+/* il QR resta su fondo bianco in entrambi i temi: serve per essere letto */
+.rc-qr { width: 132px; height: 132px; border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 6px; flex: none; }
+.rc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rc-timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.rc-timeline li { position: relative; display: flex; gap: 14px; padding: 0 0 18px 0; }
+.rc-timeline li:last-child { padding-bottom: 0; }
+.rc-timeline li::before { content: ""; position: absolute; left: 17px; top: 36px; bottom: 0; width: 2px; background: var(--line); }
+.rc-timeline li:last-child::before { display: none; }
+.rc-dot { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--neutral-soft); color: var(--muted); }
+.rc-dot.ok { background: var(--ok-soft); color: var(--ok); }
+.rc-dot.danger { background: var(--danger-soft); color: var(--danger); }
+.rc-dot.info { background: var(--info-soft); color: var(--info); }
+.rc-ev { min-width: 0; padding-top: 2px; }
+.rc-ev strong { display: block; }
+.rc-ev .muted { font-size: .88rem; overflow-wrap: anywhere; }
+.rc-ev time { font-size: .8rem; color: var(--muted); }
+.rc-send { display: grid; gap: 12px; }
+.rc-check { display: flex; gap: 8px; align-items: flex-start; font-size: .88rem; color: var(--muted); }
+.rc-check input { margin-top: 3px; }
+.rc-radios { display: flex; gap: 8px; flex-wrap: wrap; }
+.rc-radios label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 7px 16px; border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer; font-weight: 600; background: var(--surface); }
+.rc-radios label:has(input:checked) { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-strong); }
+.rc-radios label:has(input:focus-visible) { box-shadow: var(--focus); }
+.rc-pn { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rc-linkbox { display: flex; gap: 8px; align-items: center; }
+.rc-linkbox .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; }
+.rc-vat td, .rc-vat th { padding: 9px 14px; }
+.rc-items .cell-sub { display: inline; margin-left: 4px; }
+@media (max-width: 820px) {
+  main .btn, main .tab, main .rc-chip { min-height: 44px; }
+  .rc-chip, .rc-clear { display: inline-flex; align-items: center; }
+  .rc-clear { min-height: 44px; }
+  .rc-num { display: inline-block; padding: 6px 0; }
+}
+@media (max-width: 560px) {
+  .rc-total { font-size: 2.1rem; }
+  .rc-qr { width: 104px; height: 104px; }
+  .rc-table .row-actions { flex-wrap: wrap; }
+}
+@media print {
+  .rc-noprint, .rc-pn { display: none !important; }
+  .card { box-shadow: none; }
+}
+
+/* Telefono: ogni riga diventa una scheda (numero e totale in alto), senza scorrimento orizzontale */
+@media (max-width: 700px) {
+  .rc-table, .rc-table tbody { display: block; width: 100%; }
+  .rc-table thead { display: none; }
+  .rc-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .rc-table td { display: block; padding: 0; border: 0; }
+  .rc-table td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .rc-table td:nth-child(4) { grid-column: 2; grid-row: 1; font-weight: 700; font-size: 1.05rem; }
+  .rc-table td:nth-child(2) { grid-column: 1; grid-row: 2; color: var(--muted); }
+  .rc-table td:nth-child(3) { grid-column: 2; grid-row: 2; color: var(--muted); text-align: right; }
+  .rc-table td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; }
+  .rc-table td:nth-child(6) { grid-column: 1 / -1; grid-row: 4; }
+  .rc-table .row-actions { justify-content: flex-start; }
+}
+
+.rc-hero-side { display: grid; justify-items: center; gap: 6px; }

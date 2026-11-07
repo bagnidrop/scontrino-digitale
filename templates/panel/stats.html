@@ -1,7 +1,241 @@
 {% extends "panel/base.html" %}
-{% from "panel/_ui.html" import page_head, empty_state with context %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, link_card, badge, empty_state, tabs with context %}
 {% block title %}Statistiche{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-stats.css') }}">{% endblock %}
+
 {% block content %}
-{{ page_head("Statistiche", "Come va il locale: incassi, piatti più venduti, orari di punta.") }}
-<div class="card">{{ empty_state("In arrivo", "Questa sezione è in costruzione.", icon_name="chart") }}</div>
+{% call page_head("Statistiche", "Come va il locale: incassi, orari di punta, pagamenti e piatti più venduti.") %}
+  <div class="st-period" role="group" aria-label="Periodo">{{ tabs(period_tabs) }}</div>
+{% endcall %}
+
+{% if empty %}
+<div class="stack">
+  <div class="card">
+    {{ empty_state("Ancora nessuno scontrino " ~ noun, "Appena il locale emette scontrini, qui compaiono incassi, orari di punta, pagamenti e piatti più venduti. Prova con uno scontrino di prova o collega la cassa.", url_for('integration'), "Collega la cassa", "chart") }}
+    <div class="st-empty-actions">
+      <form method="post" action="{{ url_for('test_receipt') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-secondary" type="submit">{{ icon('plus', 16) }} Crea scontrino di prova</button>
+      </form>
+      {% if has_older %}<a class="btn btn-ghost" href="{{ url_90 }}">Guarda gli ultimi 90 giorni</a>{% endif %}
+      <a class="btn btn-ghost" href="{{ url_for('receipts_list') }}">Tutti gli scontrini</a>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="stack st-stack">
+  <p class="muted small st-range">Dal {{ start_text }} al {{ end_text }}. Il confronto è con {{ vs }} (dal {{ prev_start_text }} al {{ prev_end_text }}). Gli scontrini annullati non sono conteggiati.</p>
+
+  {# ───────── KPI ───────── #}
+  <section aria-label="Numeri {{ noun }}">
+    <div class="st-kpis">
+      {% for k in kpis %}{{ stat_card(k.href, k.label, k.value, k.sub, k.icon, k.tone, k.hint) }}{% endfor %}
+    </div>
+  </section>
+
+  {# ───────── In breve ───────── #}
+  {% if insights %}
+  <section aria-labelledby="st-brief-h">
+    <div class="section-head"><h2 id="st-brief-h">In breve</h2></div>
+    <div class="st-insights">
+      {% for i in insights %}{{ link_card(i.href, i.title, i.text, i.icon, i.tone) }}{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ───────── Incassi per giorno ───────── #}
+  <section aria-labelledby="st-giorni-h" id="st-giorni">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 id="st-giorni-h">Incassi per giorno</h2>
+          <p class="muted small">Tocca una barra per vedere gli scontrini di quel giorno. {{ extras.days_open }} giorni aperti su {{ n }}, in media {{ extras.per_day|euro }} per giorno aperto.</p>
+        </div>
+      </div>
+      <svg class="chart st-chart" viewBox="0 0 {{ chart.W }} {{ chart.H }}" role="group" aria-labelledby="st-giorni-t">
+        <title id="st-giorni-t">Incassi per giorno {{ noun }}: {{ s.total|euro }} in {{ s.count }} scontrini</title>
+        {% for gr in chart.grid %}
+        <line class="grid-line" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ gr.y }}" y2="{{ gr.y }}"/>
+        <text x="{{ chart.left - 8 }}" y="{{ gr.y + 4 }}" text-anchor="end">{{ gr.label }}</text>
+        {% endfor %}
+        {% for d in chart.days %}
+        {% if d.url %}<a class="st-bar-link{% if d.is_today %} is-today{% endif %}" href="{{ d.url }}" aria-label="{{ d.long|capitalize }}: {{ d.total|euro }} in {{ d.count }} scontrini. Apri gli scontrini del giorno.">
+        {% else %}<g class="st-bar-link is-empty">{% endif %}
+          <title>{{ d.long|capitalize }}: {{ d.total|euro }} ({{ d.count }} scontrini)</title>
+          <rect class="st-hit" x="{{ d.col_x }}" y="0" width="{{ d.col_w }}" height="{{ chart.H - 20 }}"/>
+          {% if d.total %}<rect class="bar" x="{{ d.x }}" y="{{ d.y }}" width="{{ d.w }}" height="{{ d.h }}" rx="2"/>
+          {% else %}<rect class="bar-soft" x="{{ d.x }}" y="{{ d.y - 3 }}" width="{{ d.w }}" height="3" rx="1.5"/>{% endif %}
+          {% if d.show %}<text class="st-lbl" x="{{ d.cx }}" y="{{ chart.label_y }}" text-anchor="middle">{{ d.lbl }}</text>
+          <text class="st-lbl st-lbl-wd" x="{{ d.cx }}" y="{{ chart.label_y2 }}" text-anchor="middle">{{ d.wd }}</text>{% endif %}
+        {% if d.url %}</a>{% else %}</g>{% endif %}
+        {% endfor %}
+        <polyline class="st-prev-line" points="{{ chart.prev_points }}" fill="none"/>
+      </svg>
+      <ul class="st-legend list-plain" aria-label="Legenda">
+        <li><svg width="14" height="14" aria-hidden="true"><rect class="bar" x="1" y="1" width="12" height="12" rx="3"/></svg> Incasso del giorno</li>
+        <li><svg width="22" height="14" aria-hidden="true"><line class="st-prev-line" x1="1" x2="21" y1="7" y2="7"/></svg> Stesso giorno del periodo precedente</li>
+      </ul>
+      <details class="st-data">
+        <summary>Vedi i dati in tabella</summary>
+        <div class="table-wrap">
+          <table class="table">
+            <caption class="sr-only">Incassi per giorno {{ noun }}</caption>
+            <thead><tr><th scope="col">Giorno</th><th scope="col" class="num">Scontrini</th><th scope="col" class="num">Incasso</th></tr></thead>
+            <tbody>
+              {% for d in chart.days|reverse %}
+              <tr{% if d.url %} data-href="{{ d.url }}"{% endif %}>
+                <td>{% if d.url %}<a href="{{ d.url }}">{{ d.long|capitalize }}</a>{% else %}{{ d.long|capitalize }}{% endif %}</td>
+                <td class="num">{{ d.count }}</td><td class="num">{{ d.total|euro }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  {# ───────── Orari e giorni della settimana ───────── #}
+  <section aria-labelledby="st-orari-h">
+    <div class="section-head"><h2 id="st-orari-h">Quando si lavora di più</h2></div>
+    <div class="grid st-when">
+      <div class="card">
+        <div class="card-head"><div>
+          <h3>Per fascia oraria</h3>
+          <p class="muted small">Numero di scontrini per giorno della settimana e ora. Più scuro, più lavoro.</p>
+        </div></div>
+        <div class="st-scroll">
+        <svg class="chart st-heat" viewBox="0 0 {{ heat.W }} {{ heat.H }}" role="group" aria-labelledby="st-heat-t">
+          <title id="st-heat-t">Scontrini per giorno della settimana e fascia oraria {{ noun }}</title>
+          {% for r in heat.rows %}<text x="{{ heat.left - 8 }}" y="{{ r.y }}" text-anchor="end">{{ r.label }}</text>{% endfor %}
+          {% for h in heat.hours %}{% if h.show %}<text x="{{ h.x }}" y="16" text-anchor="middle">{{ h.label }}</text>{% endif %}{% endfor %}
+          {% for c in heat.cells %}
+          {% if c.url %}<a class="st-cell-link" href="{{ c.url }}" aria-label="{{ c.label }}. Apri gli scontrini di {{ c.day_text }}.">
+            <title>{{ c.label }}. Giorno più attivo: {{ c.day_text }}</title>
+            <rect class="st-cell st-l{{ c.level }}" x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.h }}" rx="5"/>
+            <text class="st-cell-n{% if c.level >= 4 %} is-dark{% endif %}" x="{{ c.tx }}" y="{{ c.ty }}" text-anchor="middle">{{ c.count }}</text>
+          </a>
+          {% else %}<rect class="st-cell st-l0" x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.h }}" rx="5"><title>{{ c.label }}</title></rect>{% endif %}
+          {% endfor %}
+        </svg>
+        </div>
+        <ul class="st-legend list-plain" aria-label="Legenda">
+          <li>Meno <svg width="120" height="14" aria-hidden="true">{% for l in range(1, 6) %}<rect class="st-cell st-l{{ l }}" x="{{ (l - 1) * 24 }}" y="1" width="22" height="12" rx="3"/>{% endfor %}</svg> Più</li>
+          <li class="muted">Tocca una casella per aprire il giorno più attivo di quella fascia.</li>
+        </ul>
+        <details class="st-data">
+          <summary>Vedi i dati in tabella</summary>
+          <div class="table-wrap">
+            <table class="table">
+              <caption class="sr-only">Scontrini per giorno della settimana e ora</caption>
+              <thead><tr><th scope="col">Giorno</th>{% for h in heat.table_hours %}<th scope="col" class="num">{{ '%02d'|format(h) }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in heat.table %}{% set wi = loop.index0 %}
+                <tr><th scope="row">{{ heat.rows[wi].label }}</th>{% for v in row %}<td class="num">{{ v }}</td>{% endfor %}</tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div>
+          <h3>Per giorno della settimana</h3>
+          <p class="muted small">Scontrini totali {{ noun }}.</p>
+        </div></div>
+        <svg class="chart st-week" viewBox="0 0 {{ weekday.W }} {{ weekday.H }}" role="group" aria-labelledby="st-week-t">
+          <title id="st-week-t">Scontrini per giorno della settimana {{ noun }}</title>
+          <line class="grid-line" x1="0" x2="{{ weekday.W }}" y1="{{ weekday.base_y }}" y2="{{ weekday.base_y }}"/>
+          {% for c in weekday.cols %}
+          {% if c.url %}<a class="st-bar-link" href="{{ c.url }}" aria-label="{{ c.long }}: {{ c.count }} scontrini, {{ c.total|euro }}. Apri {{ c.day_text }}, il giorno più attivo.">
+          {% else %}<g class="st-bar-link is-empty">{% endif %}
+            <title>{{ c.long }}: {{ c.count }} scontrini, {{ c.total|euro }}</title>
+            <rect class="st-hit" x="{{ c.col_x }}" y="0" width="{{ c.col_w }}" height="{{ weekday.H }}"/>
+            {% if c.count %}<rect class="bar{% if c.is_best %} st-best{% endif %}" x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.h }}" rx="3"/>
+            <text class="st-val" x="{{ c.cx }}" y="{{ c.y - 6 }}" text-anchor="middle">{{ c.count }}</text>
+            {% else %}<rect class="bar-soft" x="{{ c.x }}" y="{{ weekday.base_y - 3 }}" width="{{ c.w }}" height="3" rx="1.5"/>{% endif %}
+            <text class="st-lbl" x="{{ c.cx }}" y="{{ weekday.label_y }}" text-anchor="middle">{{ c.wd }}</text>
+          {% if c.url %}</a>{% else %}</g>{% endif %}
+          {% endfor %}
+        </svg>
+        <details class="st-data">
+          <summary>Vedi i dati in tabella</summary>
+          <div class="table-wrap">
+            <table class="table">
+              <caption class="sr-only">Scontrini e incasso per giorno della settimana</caption>
+              <thead><tr><th scope="col">Giorno</th><th scope="col" class="num">Scontrini</th><th scope="col" class="num">Incasso</th></tr></thead>
+              <tbody>
+                {% for c in weekday.cols %}
+                <tr{% if c.url %} data-href="{{ c.url }}"{% endif %}><td>{% if c.url %}<a href="{{ c.url }}">{{ c.long }}</a>{% else %}{{ c.long }}{% endif %}</td><td class="num">{{ c.count }}</td><td class="num">{{ c.total|euro }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  {# ───────── Pagamenti ───────── #}
+  <section aria-labelledby="st-pay-h">
+    <div class="section-head"><h2 id="st-pay-h">Come pagano i clienti</h2></div>
+    <div class="st-pay">
+      {% for e in payments %}
+      <a class="card is-link st-pay-card" href="{{ e.url }}">
+        <span class="st-pay-top"><strong>{{ e.name }}</strong><span class="st-pay-pct">{{ e.pct }}%</span></span>
+        <svg class="st-meter" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{ e.pct }}% degli incassi"><rect class="bar-soft" x="0" y="0" width="100" height="8" rx="4"/><rect class="bar" x="0" y="0" width="{{ e.bar }}" height="8" rx="4"/></svg>
+        <span class="muted small">{{ e.total|euro }} · {{ e.count }} {{ 'scontrino' if e.count == 1 else 'scontrini' }}</span>
+        <span class="card-go" aria-hidden="true">Vedi gli scontrini {{ icon('chevron', 16) }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ───────── Piatti più venduti ───────── #}
+  <section aria-labelledby="st-top-h">
+    <div class="section-head"><h2 id="st-top-h">Piatti più venduti</h2></div>
+    <div class="grid cols-2 st-top">
+      {% for title, lst, key in [("Per quantità", top_qty, 'qty'), ("Per incasso", top_amount, 'total')] %}
+      <div class="card">
+        <div class="card-head"><h3>{{ title }}</h3></div>
+        {% if lst %}
+        <ol class="st-dishes list-plain">
+          {% for dsh in lst %}
+          <li>
+            <a class="st-dish-link" href="{{ url_for('receipts_list', period=period, status='valid', q=dsh.name) }}" title="Vedi gli scontrini con {{ dsh.name }}">
+            <span class="st-dish-top"><span class="st-dish-name">{{ loop.index }}. {{ dsh.name }}</span>
+              <span class="small nowrap">{% if key == 'qty' %}<strong>{{ dsh.qty|qty }}</strong> <span class="muted">· {{ dsh.total|euro }}</span>{% else %}<strong>{{ dsh.total|euro }}</strong> <span class="muted">· {{ dsh.qty|qty }} venduti</span>{% endif %}</span></span>
+            <svg class="st-dish-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-soft" x="0" y="0" width="100" height="6" rx="3"/><rect class="bar" x="0" y="0" width="{{ dsh.pct }}" height="6" rx="3"/></svg>
+            </a>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}<p class="muted">Nessun piatto venduto {{ noun }}.</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ───────── IVA ───────── #}
+  <section aria-labelledby="st-iva-h">
+    <div class="section-head">
+      <h2 id="st-iva-h">Riepilogo IVA per aliquota</h2>
+      <a class="btn btn-secondary btn-sm" href="{{ csv_url }}">{{ icon('download', 16) }} Scarica CSV</a>
+    </div>
+    <div class="card flush">
+      <div class="table-wrap">
+        <table class="table st-vat">
+          <caption class="sr-only">Imponibile, imposta e totale per aliquota IVA {{ noun }}</caption>
+          <thead><tr><th scope="col">Aliquota</th><th scope="col" class="num">Imponibile</th><th scope="col" class="num">IVA</th><th scope="col" class="num">Totale</th></tr></thead>
+          <tbody>
+            {% for v in vat %}<tr><th scope="row">{{ v.rate_text }}%</th><td class="num">{{ v.net|euro }}</td><td class="num">{{ v.vat|euro }}</td><td class="num">{{ v.gross|euro }}</td></tr>{% endfor %}
+          </tbody>
+          <tfoot><tr><th scope="row">Totale</th><td class="num">{{ vat_tot.net|euro }}</td><td class="num">{{ vat_tot.vat|euro }}</td><td class="num">{{ vat_tot.gross|euro }}</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endif %}
 {% endblock %}

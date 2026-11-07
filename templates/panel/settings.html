@@ -1,0 +1,155 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, link_card, badge, tabs with context %}
+{% block title %}Impostazioni{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-settings.css') }}">{% endblock %}
+
+{% macro err(name) -%}
+{% if errors.get(name) %}<span class="se-err" id="err-{{ name }}" role="alert">{{ icon('alert', 14) }} {{ errors[name] }}</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{{ page_head("Impostazioni", "I dati del tuo locale, le parole per i clienti e la sicurezza dell'account.") }}
+
+<div class="stack">
+
+{% if new_key %}
+<section class="card se-key" aria-labelledby="se-key-h">
+  <h2 id="se-key-h">{{ icon('key', 20) }} La tua nuova chiave API</h2>
+  <p>Copiala adesso e salvala in un posto sicuro: <strong>non verrà più mostrata</strong>.</p>
+  <pre class="code" id="apikey">{{ new_key }}</pre>
+  <div class="form-actions"><button type="button" class="btn btn-primary btn-sm" data-copy="#apikey">{{ icon('copy', 16) }} Copia la chiave</button></div>
+</section>
+{% endif %}
+
+<div class="se-tabs">{{ tabs(tab_items) }}</div>
+
+<div class="grid split se-layout">
+<div class="stack">
+
+{# ───────── Locale ───────── #}
+{% if tab == 'locale' %}
+<form class="card stack" method="post" action="{{ url_for('settings', tab='locale') }}" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="card-head"><h2>Dati del locale</h2></div>
+  <p class="muted">Compaiono sullo scontrino che vede il cliente.</p>
+  <div class="form-grid">
+    <label class="field">Nome del locale
+      <input class="input" name="name" required maxlength="80" value="{{ v.name }}" autocomplete="organization"{% if errors.name %} aria-invalid="true" aria-describedby="err-name"{% endif %}>
+      {{ err('name') }}</label>
+    <label class="field">Partita IVA
+      <input class="input" name="vat_number" maxlength="16" inputmode="numeric" value="{{ v.vat_number }}"{% if errors.vat_number %} aria-invalid="true" aria-describedby="err-vat_number"{% endif %}>
+      <span class="hint">11 cifre. Se la lasci vuota non viene stampata.</span>{{ err('vat_number') }}</label>
+  </div>
+  <label class="field">Indirizzo
+    <input class="input" name="address" maxlength="200" value="{{ v.address }}" autocomplete="street-address">
+    <span class="hint">Via, numero civico e città.</span></label>
+  <label class="field">Link per le recensioni Google <span class="muted small">(facoltativo)</span>
+    <input class="input" type="url" name="review_url" maxlength="300" placeholder="https://g.page/r/…" value="{{ v.review_url }}"{% if errors.review_url %} aria-invalid="true" aria-describedby="err-review_url"{% endif %}>
+    <span class="hint">Se lo inserisci, il cliente trova un pulsante per lasciarti una recensione.</span>{{ err('review_url') }}</label>
+  <label class="field">Nota a piè di scontrino <span class="muted small">(facoltativo)</span>
+    <input class="input" name="footer_note" maxlength="300" value="{{ v.footer_note }}" placeholder="Es. Grazie e a presto!">
+    <span class="hint">Una riga di saluto o un'informazione utile, in fondo allo scontrino.</span></label>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 16) }} Salva i dati</button></div>
+</form>
+
+{# ───────── Messaggio ───────── #}
+{% elif tab == 'messaggio' %}
+<form class="card stack" method="post" action="{{ url_for('settings', tab='messaggio') }}" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="card-head"><h2>Messaggio ai clienti</h2></div>
+  <p class="muted">È il testo che il cliente riceve su WhatsApp o SMS insieme al suo scontrino.</p>
+  <label class="field">Testo del messaggio
+    <textarea class="textarea" id="se-template" name="message_template" rows="4" maxlength="300" required data-shop="{{ s.name }}" data-link="{{ sample_link }}"{% if errors.message_template %} aria-invalid="true" aria-describedby="err-message_template"{% endif %}>{{ v.message_template }}</textarea>
+    <span class="hint">Scrivi <code>{negozio}</code> per il nome del locale e <code>{link}</code> per il collegamento allo scontrino. Se dimentichi <code>{link}</code>, lo aggiungo io in fondo.</span>{{ err('message_template') }}</label>
+  <div class="se-chips" aria-label="Inserisci un segnaposto">
+    <button class="btn btn-secondary btn-sm" type="button" data-insert="{negozio}">+ {negozio}</button>
+    <button class="btn btn-secondary btn-sm" type="button" data-insert="{link}">+ {link}</button>
+    <button class="btn btn-ghost btn-sm" type="button" data-reset="{{ default_template }}">{{ icon('undo', 14) }} Testo consigliato</button>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 16) }} Salva il messaggio</button></div>
+</form>
+
+{# ───────── Fatture ───────── #}
+{% elif tab == 'fatture' %}
+<form class="card stack" method="post" action="{{ url_for('settings', tab='fatture') }}" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="card-head"><h2>Richiesta di fattura</h2></div>
+  <p class="muted">Sotto lo scontrino il cliente può chiedere la fattura, ma solo per un periodo limitato. Qui scegli per quanti giorni.</p>
+  <label class="field se-narrow">Giorni a disposizione del cliente
+    <input class="input" type="number" name="invoice_window_days" min="0" max="30" step="1" inputmode="numeric" required value="{{ v.invoice_window_days }}"{% if errors.invoice_window_days %} aria-invalid="true" aria-describedby="err-invoice_window_days"{% endif %}>
+    <span class="hint">Da 0 a 30. Con 0 la richiesta è possibile solo nel giorno stesso dello scontrino.</span>{{ err('invoice_window_days') }}</label>
+  <div class="callout">{{ icon('info', 18) }}<div>Passato questo termine il pulsante «Richiedi la fattura» scompare dallo scontrino. Chiedi al tuo commercialista il termine giusto per la tua attività.</div></div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 16) }} Salva</button></div>
+</form>
+
+{# ───────── Account ───────── #}
+{% else %}
+<section class="card stack" aria-labelledby="se-acc-h">
+  <div class="card-head"><h2 id="se-acc-h">Il tuo account</h2></div>
+  <dl class="kv">
+    <dt>Email di accesso</dt><dd>{{ s.email }}</dd>
+  </dl>
+  <p class="muted small">L'email è quella con cui hai creato l'account e non si può cambiare da qui.</p>
+</section>
+
+<form class="card stack" method="post" action="{{ url_for('settings_password') }}" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="card-head"><h2>Cambia password</h2></div>
+  {% if errors.password %}<div class="callout warn" role="alert">{{ icon('alert', 18) }}<div>{{ errors.password }}</div></div>{% endif %}
+  <label class="field">Password attuale
+    <input class="input" type="password" name="current_password" required autocomplete="current-password"></label>
+  <div class="form-grid">
+    <label class="field">Nuova password
+      <input class="input" type="password" name="new_password" required minlength="8" autocomplete="new-password">
+      <span class="hint">Almeno 8 caratteri.</span></label>
+    <label class="field">Ripeti la nuova password
+      <input class="input" type="password" name="confirm_password" required minlength="8" autocomplete="new-password"></label>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('key', 16) }} Cambia password</button></div>
+</form>
+
+<section class="card stack" aria-labelledby="se-api-h">
+  <div class="card-head"><h2 id="se-api-h">Chiave API</h2></div>
+  <p class="muted">Serve alla tua cassa per inviare gli scontrini. Per sicurezza viene mostrata una sola volta, subito dopo averla creata.</p>
+  <dl class="kv">
+    <dt>Chiave attuale</dt><dd class="mono">{{ s.api_key_prefix }}…</dd>
+    <dt>Indirizzo per la cassa</dt><dd class="mono">{{ base_url }}/api/v1/receipts</dd>
+  </dl>
+  <form method="post" action="{{ url_for('regenerate_key') }}" data-confirm="Generare una nuova chiave API? Quella attuale smetterà di funzionare e dovrai aggiornarla sulla cassa.">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="btn btn-danger" type="submit">{{ icon('undo', 16) }} Rigenera la chiave</button>
+  </form>
+</section>
+{% endif %}
+
+</div>
+
+{# ───────── Colonna laterale ───────── #}
+<aside class="stack" aria-label="Anteprima e scorciatoie">
+  {% if tab == 'messaggio' %}
+  <section class="card stack-sm se-preview" aria-labelledby="se-prev-h">
+    <h2 id="se-prev-h">Così lo vede il cliente</h2>
+    <div class="se-bubble" id="se-preview" aria-live="polite">{{ preview }}</div>
+    <p class="small muted">L'anteprima usa il nome del locale e un link di esempio. Si aggiorna mentre scrivi.</p>
+  </section>
+  {% endif %}
+  <h2 class="se-side-h">Vai a</h2>
+  <div class="se-shortcuts">
+    {{ link_card(url_for('integration'), "Integrazione", "Collega la cassa e gestisci la chiave.", 'plug', 'info') }}
+    {{ link_card(url_for('messages_list'), "Messaggi inviati", "Vedi cosa hanno ricevuto i clienti.", 'message', 'brand') }}
+    {{ link_card(url_for('contacts_list'), "Clienti", "L'elenco dei contatti.", 'users', 'neutral') }}
+    <form method="post" action="{{ url_for('test_receipt') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="card is-link action-card tone-brand" type="submit">
+        <span class="action-icon">{{ icon('plus', 22) }}</span>
+        <span class="action-text"><strong>Scontrino di prova</strong><span>Controlla com'è fatto, senza disturbare nessuno.</span></span>
+        <span class="card-go" aria-hidden="true">{{ icon('chevron', 16) }}</span>
+      </button>
+    </form>
+  </div>
+</aside>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}{% if tab == 'messaggio' %}<script src="{{ url_for('static', filename='panel-settings.js') }}" defer></script>{% endif %}{% endblock %}

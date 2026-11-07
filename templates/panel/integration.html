@@ -1,7 +1,207 @@
 {% extends "panel/base.html" %}
-{% from "panel/_ui.html" import page_head, empty_state with context %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, link_card, badge with context %}
 {% block title %}Integrazione{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-integration.css') }}">{% endblock %}
+
+{% macro go(text) -%}<span class="card-go" aria-hidden="true">{{ text }} {{ icon('chevron', 16) }}</span>{%- endmacro %}
+
+{# Blocco di codice con bottone «Copia» (data-copy gestito da app.js) #}
+{% macro snippet(sid, label, text) %}
+<div class="in-snippet">
+  <div class="in-snippet-head">
+    <strong id="{{ sid }}-l">{{ label }}</strong>
+    <button class="btn btn-secondary btn-sm" type="button" data-copy="#{{ sid }}" aria-describedby="{{ sid }}-l">{{ icon('copy', 16) }} Copia</button>
+  </div>
+  <pre class="code" id="{{ sid }}" tabindex="0" aria-labelledby="{{ sid }}-l">{{ text }}</pre>
+</div>
+{% endmacro %}
+
 {% block content %}
-{{ page_head("Integrazione", "Collega la cassa e gestisci la chiave API.") }}
-<div class="card">{{ empty_state("In arrivo", "Questa sezione è in costruzione.", icon_name="plug") }}</div>
+{% call page_head("Collega la cassa", "Fai arrivare gli scontrini dalla tua cassa ai clienti, in automatico.") %}
+  <a class="btn btn-secondary" href="#esempi">{{ icon('file', 16) }} Esempi per chi collega la cassa</a>
+{% endcall %}
+
+<div class="stack in-stack">
+
+  {# ───────── Stato del collegamento ───────── #}
+  <section aria-labelledby="in-state-h">
+    <div class="section-head"><h2 id="in-state-h">Stato del collegamento</h2></div>
+    <div class="in-stats">
+      {% if connected %}
+        {{ stat_card(url_for('receipts_list'), "Cassa", "Collegata", "Stai già ricevendo scontrini dalla cassa.", 'plug', 'brand', 'Vedi gli scontrini') }}
+      {% else %}
+        {{ stat_card('#passi', "Cassa", "In attesa", "In attesa del primo scontrino dalla cassa." ~ (" Lo scontrino di prova funziona!" if test_count else ""), 'plug', 'warn', 'Vedi cosa fare') }}
+      {% endif %}
+      {% if last %}
+        {{ stat_card(url_for('receipt_detail', rid=last.id), "Ultimo scontrino ricevuto", "N. " ~ last.number, last.when ~ " · " ~ last.ago ~ " fa", 'clock', 'info', 'Apri lo scontrino') }}
+      {% else %}
+        {{ stat_card('#passo-2', "Ultimo scontrino ricevuto", "Nessuno", "Non è ancora arrivato nulla.", 'clock', 'neutral', 'Prova con uno di prova') }}
+      {% endif %}
+      {{ stat_card(url_for('receipts_list', period='7d', status='valid'), "Ultime 24 ore", count_24h, ("scontrino ricevuto" if count_24h == 1 else "scontrini ricevuti") if count_24h else "Nessuno scontrino ricevuto", 'receipt', 'brand' if count_24h else 'neutral', 'Vedi gli scontrini') }}
+    </div>
+  </section>
+
+  {# ───────── Percorso guidato ───────── #}
+  <section aria-labelledby="passi">
+    <div class="section-head"><h2 id="passi">Collega la cassa in 3 passi</h2></div>
+    <ol class="in-steps list-plain">
+      <li>
+        <a class="card is-link action-card in-step is-done" href="{{ url_for('settings') }}">
+          <span class="in-step-n is-done" aria-hidden="true">{{ icon('check', 18) }}</span>
+          <span class="action-text"><strong>1. La tua chiave API</strong><span>È la «password» che la cassa usa per parlare con noi. Ce l'hai già: inizia con <span class="mono">{{ key_prefix }}…</span></span></span>
+          {{ badge('Fatto', 'ok') }}
+          {{ go('') }}
+        </a>
+      </li>
+      <li id="passo-2">
+        <form method="post" action="{{ url_for('test_receipt') }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <button class="card is-link action-card in-step{% if total_count %} is-done{% endif %}" type="submit">
+            <span class="in-step-n{% if total_count %} is-done{% endif %}" aria-hidden="true">{% if total_count %}{{ icon('check', 18) }}{% else %}2{% endif %}</span>
+            <span class="action-text"><strong>2. Prova con uno scontrino di prova</strong><span>Lo crei con un tocco e vedi subito cosa riceverà il cliente.</span></span>
+            {% if total_count %}{{ badge('Fatto', 'ok') }}{% else %}{{ badge('Da fare', 'warn') }}{% endif %}
+            {{ go('') }}
+          </button>
+        </form>
+      </li>
+      <li>
+        <a class="card is-link action-card in-step{% if connected %} is-done{% endif %}" href="#esempi">
+          <span class="in-step-n{% if connected %} is-done{% endif %}" aria-hidden="true">{% if connected %}{{ icon('check', 18) }}{% else %}3{% endif %}</span>
+          <span class="action-text"><strong>3. Collega la cassa</strong><span>Dai gli esempi qui sotto a chi gestisce la tua cassa: bastano pochi minuti.</span></span>
+          {% if connected %}{{ badge('Fatto', 'ok') }}{% else %}{{ badge('Da fare', 'warn') }}{% endif %}
+          {{ go('') }}
+        </a>
+      </li>
+    </ol>
+  </section>
+
+  {# ───────── Scorciatoie ───────── #}
+  <section aria-labelledby="in-short-h">
+    <div class="section-head"><h2 id="in-short-h">Scorciatoie</h2></div>
+    <div class="in-shortcuts">
+      <form method="post" action="{{ url_for('test_receipt') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="card is-link action-card tone-brand" type="submit">
+          <span class="action-icon">{{ icon('plus', 22) }}</span>
+          <span class="action-text"><strong>Crea scontrino di prova</strong><span>Vedi cosa riceve il cliente.</span></span>
+          {{ go('') }}
+        </button>
+      </form>
+      {{ link_card(url_for('receipts_list'), "Ultimi scontrini ricevuti", "Controlla che quelli della cassa siano arrivati.", 'receipt', 'info') }}
+      {{ link_card(url_for('settings'), "Gestisci la chiave API", "Vedi l'inizio della chiave o creane una nuova.", 'key', 'warn') }}
+      {{ link_card(url_for('settings'), "Personalizza il messaggio", "Le parole con cui saluti i clienti.", 'message', 'brand') }}
+      {{ link_card(url_for('messages_list'), "Messaggi inviati", "WhatsApp e SMS partiti verso i clienti.", 'send', 'info') }}
+    </div>
+    {% if provider == 'console' %}
+    <div class="callout warn in-note">{{ icon('alert', 20) }}<span><strong>Invio in prova.</strong> Per ora WhatsApp e SMS non partono davvero verso i clienti: restano registrati ma non vengono consegnati. Per attivarli scrivi a <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</span></div>
+    {% elif not messaging_ready %}
+    <div class="callout warn in-note">{{ icon('alert', 20) }}<span><strong>Invio non ancora configurato.</strong> Gli invii WhatsApp e SMS potrebbero non partire. Scrivi a <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</span></div>
+    {% endif %}
+  </section>
+
+  {# ───────── La chiave API ───────── #}
+  <section aria-labelledby="in-key-h">
+    <a class="card is-link in-key" href="{{ url_for('settings') }}">
+      <span class="action-icon in-key-icon">{{ icon('key', 22) }}</span>
+      <span class="in-key-body">
+        <h2 id="in-key-h">La tua chiave API</h2>
+        <span class="in-key-prefix"><span class="muted small">Inizia con</span> <code class="mono">{{ key_prefix }}…</code></span>
+        <span class="muted">Per la tua sicurezza non conserviamo la chiave intera, quindi non possiamo rimostrartela: la vedi per intero <strong>una sola volta</strong>, quando la crei. Se l'hai persa o vuoi cambiarla, creane una nuova in Impostazioni: <strong>quella vecchia smette subito di funzionare</strong> e va aggiornata nella cassa.</span>
+      </span>
+      <span class="card-go" aria-hidden="true">Rigenera in Impostazioni {{ icon('chevron', 16) }}</span>
+    </a>
+  </section>
+
+  {# ───────── Esempi ───────── #}
+  <section aria-labelledby="esempi">
+    <div class="section-head"><h2 id="esempi">Esempi di chiamata</h2></div>
+    <p class="muted in-lead">Per chi collega la cassa. Gli esempi usano l'indirizzo reale del tuo sito: <span class="mono">{{ api_url }}</span>. Sostituisci <span class="mono">LA_TUA_API_KEY</span> con la tua chiave. Ogni blocco ha il suo bottone «Copia».</p>
+    <div class="stack">
+      <div class="card in-example">
+        <h3>{{ icon('plus', 18) }} Crea uno scontrino</h3>
+        <p class="muted">La cassa lo manda appena batte lo scontrino. Ti risponde con il link da mostrare al cliente (o da trasformare in QR).</p>
+        {{ snippet('in-ex-create-curl', 'Comando (curl)', ex.create.curl) }}
+        {{ snippet('in-ex-create-json', 'Dati inviati (JSON)', ex.create.body) }}
+        {{ snippet('in-ex-create-res', 'Risposta', ex.create.response) }}
+      </div>
+      <div class="card in-example">
+        <h3>{{ icon('send', 18) }} Invia lo scontrino al cliente</h3>
+        <p class="muted">Manda il link per WhatsApp (o SMS, con <span class="mono">"channel": "sms"</span>). Metti il <span class="mono">token</span> ricevuto alla creazione al posto di <span class="mono">TOKEN_DELLO_SCONTRINO</span>. Con <span class="mono">"marketing_consent": true</span> ricordi il numero solo se il cliente ha dato il consenso.</p>
+        {{ snippet('in-ex-send-curl', 'Comando (curl)', ex.send.curl) }}
+        {{ snippet('in-ex-send-json', 'Dati inviati (JSON)', ex.send.body) }}
+        {{ snippet('in-ex-send-res', 'Risposta', ex.send.response) }}
+      </div>
+      <div class="card in-example">
+        <h3>{{ icon('undo', 18) }} Annulla uno scontrino</h3>
+        <p class="muted">Quando la vendita viene stornata in cassa. Puoi ripeterlo senza problemi: se è già annullato, non succede nulla. Non servono dati da inviare.</p>
+        {{ snippet('in-ex-void-curl', 'Comando (curl)', ex.void.curl) }}
+        {{ snippet('in-ex-void-res', 'Risposta', ex.void.response) }}
+      </div>
+    </div>
+  </section>
+
+  {# ───────── Riferimento ───────── #}
+  <section aria-labelledby="in-ref-h">
+    <div class="section-head"><h2 id="in-ref-h">Cosa può fare la cassa</h2></div>
+    <div class="card flush">
+      <div class="table-wrap">
+        <table class="table in-table">
+          <caption class="sr-only">Funzioni disponibili</caption>
+          <thead><tr><th scope="col">Metodo</th><th scope="col">Percorso</th><th scope="col">A cosa serve</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-ok">POST</span></td><td class="mono nowrap">/api/v1/receipts</td><td>Crea uno scontrino e ottieni il link per il cliente.</td></tr>
+            <tr><td><span class="badge badge-ok">POST</span></td><td class="mono nowrap">/api/v1/receipts/&lt;token&gt;/send</td><td>Invia lo scontrino al cliente su WhatsApp o SMS.</td></tr>
+            <tr><td><span class="badge badge-ok">POST</span></td><td class="mono nowrap">/api/v1/receipts/&lt;token&gt;/void</td><td>Annulla uno scontrino (storno).</td></tr>
+            <tr><td><span class="badge badge-info">GET</span></td><td class="mono nowrap">/r/&lt;token&gt;</td><td>La pagina che vede il cliente (non serve la chiave).</td></tr>
+            <tr><td><span class="badge badge-info">GET</span></td><td class="mono nowrap">/r/&lt;token&gt;/qr.svg</td><td>Il QR code dello scontrino, da stampare.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <ul class="in-tips list-plain">
+      <li>{{ icon('key', 18) }}<span><strong>Come ci si presenta.</strong> Ogni chiamata API porta la chiave nell'intestazione <span class="mono">X-API-Key</span> (oppure <span class="mono">Authorization: Bearer …</span>).</span></li>
+      <li>{{ icon('check', 18) }}<span><strong>Nessun doppione.</strong> Se invii sempre un <span class="mono">external_id</span> (il numero dello scontrino in cassa) e la cassa riprova per un errore di rete, riceve lo stesso scontrino: non ne nascono due.</span></li>
+      <li>{{ icon('file', 18) }}<span><strong>Aliquote IVA.</strong> Indica la percentuale (da 0 a 30): in Italia le più usate sono 4, 5, 10 e 22. Se non la indichi, vale 10. Il prezzo si può dare in euro (<span class="mono">unit_price</span>) o in centesimi (<span class="mono">unit_price_cents</span>).</span></li>
+      <li>{{ icon('wallet', 18) }}<span><strong>Controllo del totale.</strong> Se mandi anche <span class="mono">total_cents</span>, deve coincidere con la somma delle righe.</span></li>
+      <li>{{ icon('send', 18) }}<span><strong>Limite di invii.</strong> Al massimo 3 invii per ogni scontrino. In più, la cassa può fare fino a 600 chiamate al minuto.</span></li>
+    </ul>
+  </section>
+
+  {# ───────── Problemi ───────── #}
+  <section aria-labelledby="in-help-h">
+    <div class="section-head"><h2 id="in-help-h">Qualcosa non va?</h2></div>
+    <div class="in-help">
+      <details class="card in-problem">
+        <summary><span class="badge badge-danger">401</span> «API key mancante» o «API key non valida»</summary>
+        <p>La cassa non ha mandato la chiave, oppure ne usa una vecchia o con un errore di battitura.</p>
+        <ul><li>Controlla che la chiave sia nell'intestazione <span class="mono">X-API-Key</span>, senza spazi in più.</li>
+          <li>Se l'hai rigenerata, <a href="{{ url_for('settings') }}">quella di prima non vale più</a>: aggiorna la cassa con la nuova.</li></ul>
+      </details>
+      <details class="card in-problem">
+        <summary><span class="badge badge-warn">400</span> «total_cents non coincide con la somma delle righe»</summary>
+        <p>Il totale che hai indicato è diverso dalla somma di quantità × prezzo di tutte le righe.</p>
+        <ul><li>Ricalcola il totale, oppure non mandare <span class="mono">total_cents</span>: lo calcoliamo noi.</li>
+          <li>Altri 400 comuni: manca <span class="mono">items</span> o un nome/prezzo, oppure il JSON non è scritto bene. Il messaggio dice quale riga controllare.</li></ul>
+      </details>
+      <details class="card in-problem">
+        <summary><span class="badge badge-warn">429</span> «troppe richieste» o «limite di invii raggiunto»</summary>
+        <p>La cassa sta chiamando troppo spesso (oltre 600 volte al minuto), oppure hai già inviato quello scontrino 3 volte.</p>
+        <ul><li>Aspetta un minuto e riprova, senza ripetere la chiamata in continuazione.</li>
+          <li>Per il limite di 3 invii, non puoi inviare lo stesso scontrino una quarta volta: crea un nuovo scontrino o consegna il link al cliente.</li></ul>
+      </details>
+      <details class="card in-problem">
+        <summary><span class="badge badge-warn">404 / 409</span> «scontrino non trovato» o «scontrino annullato»</summary>
+        <p>Il <span class="mono">token</span> è sbagliato (o di un altro locale), oppure stai provando a inviare uno scontrino già annullato.</p>
+        <ul><li>Usa il <span class="mono">token</span> ricevuto quando hai creato lo scontrino.</li>
+          <li>Per riavere uno scontrino annullato, ripristinalo da <a href="{{ url_for('receipts_list', status='void') }}">Scontrini annullati</a>.</li></ul>
+      </details>
+      <details class="card in-problem">
+        <summary><span class="badge badge-danger">502</span> L'invio non è partito</summary>
+        <p>Il messaggio non è stato consegnato (numero non valido o servizio di messaggistica non raggiungibile).</p>
+        <ul><li>Guarda il motivo in <a href="{{ url_for('messages_list', status='failed') }}">Messaggi non consegnati</a>.</li>
+          <li>Se non si risolve, scrivi a <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</li></ul>
+      </details>
+    </div>
+  </section>
+</div>
 {% endblock %}

@@ -1,0 +1,18 @@
+/* Impostazioni: solo variabili e componenti del design system. Prefisso .se- */
+.se-tabs { max-width: 100%; overflow-x: auto; }
+.se-layout { align-items: start; }
+.se-narrow { max-width: 260px; }
+.se-err { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-weight: 600; font-size: .86rem; }
+.field .input[aria-invalid="true"], .field .textarea[aria-invalid="true"] { border-color: var(--danger); }
+.se-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.se-key h2 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
+.se-key { border-color: var(--brand); }
+.se-key pre.code { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.se-preview h2, .se-side-h { margin: 0; }
+.se-side-h { font-size: 1rem; color: var(--muted); }
+.se-bubble { padding: 12px 14px; border-radius: 14px 14px 14px 4px; background: var(--brand-soft); color: var(--ink); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.se-shortcuts { display: grid; gap: 12px; }
+.se-shortcuts form { display: flex; }
+.se-shortcuts form .card { flex: 1; width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.se-shortcuts .action-text { flex: 1 1 auto; }
+.se-layout code { font-family: var(--mono); background: var(--neutral-soft); padding: 1px 5px; border-radius: 5px; }

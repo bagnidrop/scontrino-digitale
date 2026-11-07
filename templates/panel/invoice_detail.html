@@ -1,0 +1,45 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, badge with context %}
+{% from "panel/_invoice_actions.html" import actions with context %}
+{% block title %}Fattura per {{ i.company_name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-invoices.css') }}">{% endblock %}
+{% block content %}
+  {% call page_head(i.company_name, "Richiesta di fattura ricevuta il " ~ (i.created_at|dt) ~ ".") %}
+    <a class="btn btn-secondary" href="{{ url_for('invoices_list') }}">← Tutte le fatture</a>
+  {% endcall %}
+  <div class="stack">
+    {% if i.voided %}
+    <div class="callout warn" role="alert">{{ icon('alert', 20) }}
+      <span><strong>Lo scontrino n. {{ i.number }} è stato annullato.</strong> Non va evasa nessuna fattura, a meno che tu non lo ripristini dalla <a href="{{ url_for('receipt_detail', rid=i.rid) }}">pagina dello scontrino</a>.</span></div>
+    {% endif %}
+    <div class="card">
+      <div class="card-head">
+        <h2>Stato</h2>
+        {% if i.status == 'evasa' %}{{ badge("Evasa", "ok") }}{% else %}{{ badge("Da evadere", "warn") }}{% endif %}
+      </div>
+      {{ actions(i, url_for('invoice_detail', inv_id=i.id), '') }}
+    </div>
+    <div class="grid split">
+      <div class="card">
+        <div class="card-head"><h2>Dati di fatturazione</h2></div>
+        <dl class="kv">
+          <dt>Ragione sociale</dt><dd>{{ i.company_name }}</dd>
+          <dt>Partita IVA</dt><dd class="mono">{{ i.vat_number or '—' }}</dd>
+          <dt>Codice fiscale</dt><dd class="mono">{{ i.tax_code or '—' }}</dd>
+          <dt>Codice SDI</dt><dd class="mono">{{ i.sdi_code }}</dd>
+          <dt>PEC</dt><dd>{{ i.pec or '—' }}</dd>
+          <dt>Indirizzo</dt><dd>{{ i.address }}</dd>
+          <dt>Email</dt><dd><a href="mailto:{{ i.email }}">{{ i.email }}</a></dd>
+        </dl>
+        <p class="muted small inv-tip">Il codice SDI «0000000» significa che il cliente non ne ha uno: usa la PEC o l'email.</p>
+      </div>
+      <a class="card is-link inv-receipt" href="{{ url_for('receipt_detail', rid=i.rid) }}">
+        <span class="stat-label">Scontrino collegato</span>
+        <span class="stat-value">{{ i.total_cents|euro }}</span>
+        <span class="stat-sub">n. {{ i.number }} del {{ i.receipt_date|dt }}</span>
+        {% if i.voided %}<span>{{ badge("annullato", "danger") }}</span>{% endif %}
+        <span class="card-go">Apri lo scontrino {{ icon('chevron', 16) }}</span>
+      </a>
+    </div>
+  </div>
+{% endblock %}

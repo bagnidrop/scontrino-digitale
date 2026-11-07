@@ -1,0 +1,70 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, empty_state, pager with context %}
+{% block title %}Clienti{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-contacts.css') }}">{% endblock %}
+{% block content %}
+  {% call page_head("Clienti", "I clienti che ti hanno dato il consenso a ricevere le tue comunicazioni. Solo loro: gli altri numeri non vengono mai salvati.") %}
+    {% if total %}<a class="btn btn-secondary" href="{{ export_url }}">{{ icon('download', 16) }} Esporta CSV</a>{% endif %}
+  {% endcall %}
+
+  <div class="stack">
+    <div class="grid cols-4">
+      {{ stat_card(url_for('contacts_list'), "Clienti con consenso", total, "numeri nel tuo elenco", "users", "brand", "Mostra tutti") }}
+      {{ stat_card(url_for('contacts_list', new=30), "Nuovi, ultimi 30 giorni", new30, "consensi raccolti di recente", "sparkle", "info", "Mostra i nuovi") }}
+      {{ stat_card(url_for('messages_list', status='sent', period='30d'), "Scontrini inviati", sent, "su WhatsApp e SMS", "send", "neutral", "Vedi i messaggi") }}
+      {{ stat_card(export_url, "Elenco per Excel", "CSV", "scarica i numeri e la data del consenso", "download", "neutral", "Scarica") }}
+    </div>
+
+    <div class="callout">
+      {{ icon('info', 20) }}
+      <span><strong>Privacy (GDPR).</strong> Il numero di un cliente viene salvato solo se, quando riceve lo scontrino, spunta la casella per i messaggi del tuo locale. Qui sotto trovi la data del consenso. Se un cliente ti chiede di essere cancellato, elimina il suo numero con il pulsante «Elimina»: sparisce subito.</span>
+    </div>
+
+    <div class="toolbar">
+      <div class="row">
+        {% if recent %}<span class="badge badge-info">Solo i nuovi degli ultimi 30 giorni</span>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('contacts_list', q=q or None) }}">Mostra tutti</a>{% endif %}
+        {% if not recent %}<span class="muted">{{ count }} {{ 'cliente' if count == 1 else 'clienti' }}{% if q %} per «{{ q }}»{% endif %}</span>{% endif %}
+      </div>
+      <form method="get" action="{{ url_for('contacts_list') }}" role="search">
+        {% if recent %}<input type="hidden" name="new" value="30">{% endif %}
+        <label class="sr-only" for="ct-q">Cerca un numero</label>
+        <input class="input" id="ct-q" type="search" name="q" value="{{ q }}" inputmode="tel" placeholder="Cerca un numero…">
+        <button class="btn btn-secondary" type="submit">{{ icon('search', 16) }} Cerca</button>
+        {% if q %}<a class="btn btn-ghost" href="{{ url_for('contacts_list', new=30 if recent else None) }}">Azzera</a>{% endif %}
+      </form>
+    </div>
+
+    <div class="card flush">
+      {% if rows %}
+      <div class="table-wrap">
+        <table class="table ct-table">
+          <thead><tr><th>Numero</th><th>Consenso marketing dato il</th><th><span class="sr-only">Azioni</span></th></tr></thead>
+          <tbody>
+          {% for c in rows %}
+            <tr>
+              <td><a class="ct-phone mono" href="tel:{{ c.phone }}" title="Chiama questo numero"><strong>{{ c.phone }}</strong></a></td>
+              <td class="nowrap">{{ icon('calendar', 15, 'ct-ico') }} {{ c.consent_at|dt }}</td>
+              <td>
+                <div class="row-actions">
+                  <form method="post" action="{{ url_for('contact_delete', cid=c.id) }}" class="inline" data-confirm="Eliminare il numero {{ c.phone }}? Non potrai più recuperarlo.">
+                    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                    <input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
+                    <button class="btn btn-danger btn-sm" type="submit" aria-label="Elimina il numero {{ c.phone }}">{{ icon('trash', 15) }} Elimina</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% elif q or recent %}
+        {{ empty_state("Nessun cliente trovato", "Prova con meno cifre del numero, oppure mostra tutto l'elenco.", url_for('contacts_list'), "Mostra tutti i clienti", "search") }}
+      {% else %}
+        {{ empty_state("Ancora nessun cliente nell'elenco", "Quando invii lo scontrino su WhatsApp o SMS, il cliente può acconsentire a ricevere le tue offerte: il suo numero comparirà qui. Senza consenso, non viene salvato niente.", url_for('integration'), "Scopri come inviare gli scontrini", "users") }}
+      {% endif %}
+    </div>
+    {{ pager(page, pages, 'contacts_list') }}
+  </div>
+{% endblock %}

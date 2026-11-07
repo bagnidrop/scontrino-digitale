@@ -1,0 +1,28 @@
+/* Sezione Fatture (prefisso inv-) */
+.inv-table td { vertical-align: top; }
+.inv-client { min-width: 220px; }
+.inv-client a { text-decoration: none; }
+.inv-client a:hover strong { text-decoration: underline; }
+.inv-actions { flex-wrap: wrap; justify-content: flex-start; min-width: 200px; }
+.inv-void-note { text-decoration: none; color: inherit; }
+.inv-void-note:hover { color: inherit; border-color: var(--warn); }
+.inv-receipt { display: flex; flex-direction: column; gap: 6px; }
+.inv-receipt .card-go { margin-top: 8px; }
+.inv-tip { margin-top: 14px; }
+.inv-copy { display: none; }
+.toolbar .input { min-width: 240px; }
+@media (max-width: 560px) { .toolbar .input { min-width: 0; flex: 1; } .toolbar form { width: 100%; } }
+
+/* tap-target comodi su telefono e tablet */
+@media (max-width: 820px) { main .btn, main .tab { min-height: 44px; } }
+
+/* Telefono: ogni richiesta diventa una scheda, niente scorrimento orizzontale */
+@media (max-width: 700px) {
+  .inv-table, .inv-table tbody, .inv-table tr, .inv-table td { display: block; width: 100%; }
+  .inv-table thead { display: none; }
+  .inv-table tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .inv-table td { padding: 4px 0; border: 0; }
+  .inv-table td[data-label]::before { content: attr(data-label); display: block; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .inv-client { min-width: 0; }
+  .inv-actions { min-width: 0; }
+}

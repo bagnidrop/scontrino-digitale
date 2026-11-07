@@ -1,0 +1,243 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, link_card, badge, tabs with context %}
+{% block title %}Panoramica{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-overview.css') }}">{% endblock %}
+
+{% macro go(text) -%}<span class="card-go" aria-hidden="true">{{ text }} {{ icon('chevron', 16) }}</span>{%- endmacro %}
+
+{% block content %}
+{% call page_head(greeting ~ ", " ~ shop['name'], "Oggi è " ~ today_name ~ ".") %}
+  {% if not new_shop %}
+  <div class="ov-period" role="group" aria-label="Periodo">{{ tabs(period_tabs) }}</div>
+  {% endif %}
+{% endcall %}
+
+{% if new_shop %}
+{# ───────── Locale nuovo: checklist di avvio ───────── #}
+<section class="stack" aria-labelledby="ov-start-h">
+  <div class="card ov-welcome">
+    <span class="empty-icon">{{ icon('sparkle', 28) }}</span>
+    <div>
+      <h2 id="ov-start-h">Benvenuto! Mettiamo in piedi il locale in 4 passi</h2>
+      <p class="muted">Ci vogliono pochi minuti. Appena arriva il primo scontrino, qui vedrai incassi, grafici e cose da fare.</p>
+      <p class="ov-progress"><progress class="meter" max="4" value="{{ done_count }}" aria-label="Passi completati">{{ done_count }} su 4</progress>
+        <span class="small muted">{{ done_count }} su 4 completati</span></p>
+    </div>
+  </div>
+  <ol class="ov-steps list-plain">
+    {% for s in steps %}
+    <li>
+      {% set inner %}
+        <span class="ov-step-n{% if s.done %} is-done{% endif %}" aria-hidden="true">{% if s.done %}{{ icon('check', 18) }}{% else %}{{ loop.index }}{% endif %}</span>
+        <span class="action-text"><strong>{{ s.title }}</strong><span>{{ s.text }}</span></span>
+        {% if s.done %}{{ badge('Fatto', 'ok') }}{% else %}{{ badge('Da fare', 'warn') }}{% endif %}
+        <span class="card-go" aria-hidden="true">{{ icon('chevron', 16) }}</span>
+      {% endset %}
+      {% if s.post %}
+      <form method="post" action="{{ url_for('test_receipt') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="card is-link action-card ov-step{% if s.done %} is-done{% endif %}" type="submit">{{ inner }}</button>
+      </form>
+      {% else %}
+      <a class="card is-link action-card ov-step{% if s.done %} is-done{% endif %}" href="{{ s.href }}">{{ inner }}</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+{% else %}
+<div class="stack ov-stack">
+
+  {# ───────── Numeri del periodo ───────── #}
+  <section aria-label="Numeri {{ period_noun }}">
+    <div class="ov-stats">
+      {{ stat_card(url_for('receipts_list', period=period, status='valid'), "Incasso", cur.total|euro, cmp.total, 'wallet', 'brand', 'Vedi gli scontrini') }}
+      {{ stat_card(url_for('receipts_list', period=period, status='valid'), "Scontrini", cur.count, cmp.count, 'receipt', 'info', "Vedi l'elenco") }}
+      {{ stat_card(url_for('stats_page', period=stats_period), "Scontrino medio", cur.avg|euro, cmp.avg if cur.count else 'Nessuno scontrino ' ~ period_noun, 'trend', 'neutral', 'Vedi le statistiche') }}
+      {{ stat_card(url_for('receipts_list', period=period, status='valid'), "Aperti dal cliente", cur.open_pct ~ '%', (cur.opened ~ ' su ' ~ cur.count ~ ' scontrini') if cur.count else 'Nessuno scontrino ' ~ period_noun, 'eye', 'info', 'Vedi gli scontrini') }}
+      {{ stat_card(url_for('invoices_list', status='nuova' if pending else 'all'), "Fatture da evadere", pending, 'Richieste dei clienti in attesa' if pending else 'Nessuna richiesta in attesa', 'file', 'warn' if pending else 'neutral', 'Vedi le fatture') }}
+      {{ stat_card(url_for('messages_list', period=period, status='sent'), "Messaggi inviati", msg_cur, cmp.msg, 'message', 'brand', 'Vedi i messaggi') }}
+    </div>
+  </section>
+
+  {# ───────── Da fare ───────── #}
+  <section aria-labelledby="ov-todo-h">
+    <div class="section-head"><h2 id="ov-todo-h">Da fare</h2></div>
+    {% if pending or failed or voided_today %}
+    <div class="ov-todo">
+      {% if pending %}
+      <a class="card is-link action-card tone-warn" href="{{ url_for('invoices_list', status='nuova') }}">
+        <span class="action-icon">{{ icon('file', 22) }}</span>
+        <span class="action-text"><strong>{{ pending }} {{ 'fattura da evadere' if pending == 1 else 'fatture da evadere' }}</strong><span>Un cliente ha chiesto la fattura: preparala.</span></span>
+        {{ go('Apri') }}
+      </a>
+      {% endif %}
+      {% if failed %}
+      <a class="card is-link action-card tone-danger" href="{{ url_for('messages_list', status='failed', period='30d') }}">
+        <span class="action-icon">{{ icon('alert', 22) }}</span>
+        <span class="action-text"><strong>{{ failed }} {{ 'messaggio non consegnato' if failed == 1 else 'messaggi non consegnati' }}</strong><span>Negli ultimi 30 giorni. Controlla i numeri e riprova.</span></span>
+        {{ go('Apri') }}
+      </a>
+      {% endif %}
+      {% if voided_today %}
+      <a class="card is-link action-card tone-info" href="{{ url_for('receipts_list', period='today', status='void') }}">
+        <span class="action-icon">{{ icon('undo', 22) }}</span>
+        <span class="action-text"><strong>{{ voided_today }} {{ 'scontrino annullato' if voided_today == 1 else 'scontrini annullati' }} oggi</strong><span>Controlla che sia tutto giusto.</span></span>
+        {{ go('Apri') }}
+      </a>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="callout"><span>{{ icon('check', 20) }}</span><span><strong>Tutto in ordine.</strong> Nessuna fattura da evadere, nessun messaggio non consegnato.</span></div>
+    {% endif %}
+  </section>
+
+  {# ───────── Andamento incassi ───────── #}
+  <section aria-labelledby="ov-chart-h">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 id="ov-chart-h">Incassi degli ultimi {{ chart.n }} giorni</h2>
+          <p class="muted small"><strong>{{ chart.total|euro }}</strong> in {{ chart.count }} scontrini · {{ chart.delta }}.</p>
+        </div>
+        <a class="card-go" href="{{ url_for('stats_page', period=stats_period) }}">Tutte le statistiche {{ icon('chevron', 16) }}</a>
+      </div>
+      <svg class="chart ov-chart" viewBox="0 0 {{ chart.W }} {{ chart.H }}" role="group" aria-labelledby="ov-chart-h">
+        {% for gr in chart.grid %}
+        <line class="grid-line" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ gr.y }}" y2="{{ gr.y }}"/>
+        <text x="{{ chart.left - 8 }}" y="{{ gr.y + 4 }}" text-anchor="end">{{ gr.label }}</text>
+        {% endfor %}
+        {% for d in chart.days %}
+        <a class="ov-bar-link{% if d.is_today %} is-today{% endif %}" href="{{ url_for('receipts_list', day=d.iso) }}" aria-label="{{ d.long }}: {{ d.total|euro }} in {{ d.count }} scontrini. Apri gli scontrini del giorno.">
+          <title>{{ d.long }}: {{ d.total|euro }} ({{ d.count }} scontrini){% if d.has_prev %}. Prima: {{ d.ptotal|euro }}{% endif %}</title>
+          <rect class="ov-hit" x="{{ d.col_x }}" y="{{ d.col_y }}" width="{{ d.col_w }}" height="{{ d.col_h }}"/>
+          {% if d.total %}<rect class="bar" x="{{ d.x }}" y="{{ d.y }}" width="{{ d.w }}" height="{{ d.h }}" rx="3"/>
+          {% else %}<rect class="bar-soft" x="{{ d.x }}" y="{{ d.y - 3 }}" width="{{ d.w }}" height="3" rx="1.5"/>{% endif %}
+          {% if d.has_prev %}<rect class="ov-prev" x="{{ d.x - 2 }}" y="{{ d.py }}" width="{{ d.w + 4 }}" height="3" rx="1.5"/>{% endif %}
+          {% if d.show_label %}
+          <text class="ov-lbl" x="{{ d.cx }}" y="{{ chart.label_y }}" text-anchor="middle">{{ d.label }}</text>
+          {% if d.show_wd %}<text class="ov-lbl ov-lbl-wd" x="{{ d.cx }}" y="{{ chart.label_y2 }}" text-anchor="middle">{{ d.wd }}</text>{% endif %}
+          {% endif %}
+        </a>
+        {% endfor %}
+      </svg>
+      <ul class="ov-legend list-plain" aria-label="Legenda">
+        <li><svg width="14" height="14" aria-hidden="true"><rect class="bar" x="1" y="1" width="12" height="12" rx="3"/></svg> Incasso del giorno</li>
+        <li><svg width="14" height="14" aria-hidden="true"><rect class="ov-prev" x="0" y="5.5" width="14" height="3" rx="1.5"/></svg> Lo stesso giorno, {{ chart.n }} giorni prima</li>
+        {% if chart.best %}<li class="ov-best">{{ icon('star', 14) }} Giorno migliore: <a href="{{ url_for('receipts_list', day=chart.best.iso) }}">{{ chart.best.long }} ({{ chart.best.total|euro }})</a></li>{% endif %}
+      </ul>
+      <details class="ov-data">
+        <summary>Vedi i dati in tabella</summary>
+        <div class="table-wrap">
+          <table class="table">
+            <caption class="sr-only">Incassi per giorno</caption>
+            <thead><tr><th scope="col">Giorno</th><th scope="col" class="num">Scontrini</th><th scope="col" class="num">Incasso</th></tr></thead>
+            <tbody>
+              {% for d in chart.days|reverse %}
+              <tr data-href="{{ url_for('receipts_list', day=d.iso) }}"><td><a href="{{ url_for('receipts_list', day=d.iso) }}">{{ d.long }}</a></td><td class="num">{{ d.count }}</td><td class="num">{{ d.total|euro }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  {# ───────── Fasce orarie e piatti ───────── #}
+  <section aria-label="Orari di punta e piatti più venduti">
+    <div class="grid cols-2">
+      <a class="card is-link ov-insight" href="{{ url_for('stats_page', period=stats_period) }}">
+        <span class="card-head"><h2>Orari di punta</h2><span class="stat-icon" aria-hidden="true">{{ icon('clock', 18) }}</span></span>
+        {% if hours %}
+        <span class="ov-lead">Si lavora di più alle <strong>{{ '%02d'|format(hours.peak) }}:00</strong>
+          <span class="muted">({{ hours.peak_count }} {{ 'scontrino' if hours.peak_count == 1 else 'scontrini' }}, {{ hours.peak_total|euro }})</span></span>
+        <svg class="chart ov-hours" viewBox="0 0 {{ hours.W }} {{ hours.H }}" role="img" aria-label="Scontrini per ora {{ period_noun }}. Punta alle {{ hours.peak }}.">
+          <line class="grid-line" x1="{{ hours.left }}" x2="{{ hours.right }}" y1="{{ hours.base }}" y2="{{ hours.base }}"/>
+          {% for c in hours.cols %}
+          {% if c.count %}<rect class="bar{% if c.peak %} ov-peak{% endif %}" x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.bh }}" rx="3"><title>{{ '%02d'|format(c.h) }}:00, {{ c.count }} scontrini, {{ c.total|euro }}</title></rect>
+          {% else %}<rect class="bar-soft" x="{{ c.x }}" y="{{ hours.base - 3 }}" width="{{ c.w }}" height="3" rx="1.5"/>{% endif %}
+          {% if c.show %}<text x="{{ c.cx }}" y="{{ hours.label_y }}" text-anchor="middle">{{ c.h }}</text>{% endif %}
+          {% endfor %}
+        </svg>
+        {% else %}
+        <span class="muted">Nessuno scontrino {{ period_noun }}: scegli un periodo più lungo per vedere gli orari di punta.</span>
+        {% endif %}
+        <span class="card-go" aria-hidden="true">Vedi le statistiche {{ icon('chevron', 16) }}</span>
+      </a>
+
+      <a class="card is-link ov-insight" href="{{ url_for('stats_page', period=stats_period) }}">
+        <span class="card-head"><h2>Piatti più venduti</h2><span class="stat-icon" aria-hidden="true">{{ icon('star', 18) }}</span></span>
+        {% if dishes %}
+        <ol class="ov-dishes list-plain">
+          {% for dsh in dishes %}
+          <li>
+            <span class="ov-dish-top"><span class="ov-dish-name">{{ loop.index }}. {{ dsh.name }}</span>
+              <span class="muted small nowrap">{{ dsh.qty|qty }} venduti · <strong class="ov-dish-eur">{{ dsh.cents|euro }}</strong></span></span>
+            <svg class="ov-dish-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-soft" x="0" y="0" width="100" height="6" rx="3"/><rect class="bar" x="0" y="0" width="{{ dsh.pct }}" height="6" rx="3"/></svg>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <span class="muted">Nessun piatto venduto {{ period_noun }}.</span>
+        {% endif %}
+        <span class="card-go" aria-hidden="true">Vedi le statistiche {{ icon('chevron', 16) }}</span>
+      </a>
+    </div>
+  </section>
+
+  {# ───────── Scorciatoie ───────── #}
+  <section aria-labelledby="ov-short-h">
+    <div class="section-head"><h2 id="ov-short-h">Scorciatoie</h2></div>
+    <div class="ov-shortcuts">
+      <form method="post" action="{{ url_for('test_receipt') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="card is-link action-card tone-brand" type="submit">
+          <span class="action-icon">{{ icon('plus', 22) }}</span>
+          <span class="action-text"><strong>Crea scontrino di prova</strong><span>Vedi cosa riceve il cliente.</span></span>
+          {{ go('') }}
+        </button>
+      </form>
+      {{ link_card(url_for('integration'), "Collega la cassa", "Scontrini in automatico dal tuo gestionale.", 'plug', 'info') }}
+      {{ link_card(url_for('settings'), "Personalizza il messaggio", "Le parole con cui saluti i clienti.", 'message', 'brand') }}
+      {{ link_card(url_for('invoices_list'), "Esporta le fatture", "Elenco delle richieste, pronto da scaricare.", 'download', 'info') }}
+      {% if has_review %}
+      {{ link_card(url_for('settings'), "Link recensioni Google", "Attivo: i clienti possono recensirti.", 'star', 'brand') }}
+      {% else %}
+      {{ link_card(url_for('settings'), "Aggiungi il link alle recensioni", "Manca: ricevi più recensioni su Google.", 'star', 'warn') }}
+      {% endif %}
+      {{ link_card(url_for('contacts_list'), "I tuoi clienti", "Chi ha dato il consenso a ricevere novità.", 'users', 'neutral') }}
+    </div>
+  </section>
+
+  {# ───────── Ultimi scontrini ───────── #}
+  <section aria-labelledby="ov-recent-h">
+    <div class="section-head">
+      <h2 id="ov-recent-h">Ultimi scontrini</h2>
+      <a href="{{ url_for('receipts_list') }}">Vedi tutti →</a>
+    </div>
+    <div class="card flush">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th scope="col">Scontrino</th><th scope="col" class="ov-hide-sm">Pagamento</th>
+            <th scope="col">Stato</th><th scope="col" class="num">Totale</th>
+          </tr></thead>
+          <tbody>
+            {% for r in recent %}
+            <tr data-href="{{ url_for('receipt_detail', rid=r['id']) }}"{% if r['voided_at'] %} class="is-void"{% endif %}>
+              <td><a href="{{ url_for('receipt_detail', rid=r['id']) }}"><strong>N. {{ r['number'] }}</strong></a>
+                <span class="cell-sub">{{ r['created_at']|dt }}{% if r['table_label'] %} · {{ r['table_label'] }}{% endif %}</span></td>
+              <td class="ov-hide-sm">{{ r['payment_method'] or '—' }}</td>
+              <td>{% if r['voided_at'] %}{{ badge('annullato', 'danger') }}{% elif r['views'] %}{{ badge('Aperto', 'ok') }}{% else %}{{ badge('Non aperto', 'neutral') }}{% endif %}</td>
+              <td class="num">{{ r['total_cents']|euro }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

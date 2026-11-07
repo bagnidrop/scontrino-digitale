@@ -265,7 +265,7 @@ def init_db(config):
             # Più istanze serverless possono partire insieme: il lock evita corse tra CREATE.
             db.execute("SELECT pg_advisory_lock(727274)")
             try:
-                exists = db.execute("SELECT to_regclass('public.rate_hits')").fetchone()[0]
+                exists = db.execute("SELECT to_regclass('rate_hits')").fetchone()[0]
                 if not exists:
                     db.execute(schema_for("postgres"))
                 db.commit()

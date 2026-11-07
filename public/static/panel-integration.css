@@ -1,0 +1,66 @@
+/* Integrazione: solo variabili e componenti del design system. Prefisso .in- */
+.in-stack { gap: 28px; }
+.in-stack .section-head h2, .in-key h2, .in-example h3 { margin: 0; }
+.in-stats { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.in-stats .stat-card { min-height: 0; }
+.in-stats .stat-value { font-size: 1.7rem; }
+.in-lead { margin: -4px 0 14px; max-width: 80ch; }
+.in-note { margin-top: 14px; }
+
+/* Percorso a 3 passi */
+.in-steps { display: grid; gap: 12px; }
+.in-steps li { padding: 0; border: 0; scroll-margin-top: 80px; }
+.in-steps form { display: flex; }
+.in-step { width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.in-step.is-done { background: var(--surface-2); }
+.in-step .action-text { flex: 1 1 auto; }
+.in-step .badge { flex: none; }
+.in-step-n { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; font-weight: 750;
+  background: var(--brand-soft); color: var(--brand); border: 2px solid var(--brand); }
+.in-step-n.is-done { background: var(--brand); color: var(--brand-ink); }
+
+/* Scorciatoie */
+.in-shortcuts { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.in-shortcuts form { display: flex; }
+.in-shortcuts form .card { flex: 1; width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.in-shortcuts .action-text { flex: 1 1 auto; }
+
+/* Chiave API */
+.in-key { display: flex; align-items: center; gap: 16px; }
+.in-key-icon { background: var(--warn-soft); color: var(--warn); }
+.in-key-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.in-key-prefix code { padding: 2px 10px; border-radius: 8px; background: var(--neutral-soft); font-weight: 700; }
+.in-key .card-go { flex: none; }
+
+/* Esempi */
+.in-example { display: flex; flex-direction: column; gap: 12px; }
+.in-example h3 { display: flex; align-items: center; gap: 8px; }
+.in-snippet { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.in-snippet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.in-snippet pre.code:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Riferimento */
+.in-table td:last-child { min-width: 220px; }
+.in-tips { margin-top: 14px; }
+.in-tips li { display: flex; gap: 12px; align-items: flex-start; }
+.in-tips .icon { flex: none; margin-top: 2px; color: var(--brand); }
+
+/* Problemi */
+.in-help { display: grid; gap: 10px; }
+.in-problem { padding: 0; }
+.in-problem summary { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: pointer; font-weight: 650; border-radius: var(--radius); }
+.in-problem summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.in-problem summary .badge { flex: none; }
+.in-problem[open] summary { border-bottom: 1px solid var(--line); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.in-problem p, .in-problem ul { margin: 0; padding: 12px 18px 0; }
+.in-problem ul { padding-left: 38px; }
+.in-problem > :last-child { padding-bottom: 16px; }
+
+@media (max-width: 960px) { .in-stats { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+@media (max-width: 560px) {
+  .in-shortcuts { grid-template-columns: minmax(0, 1fr); }
+  .in-step .badge { display: none; }
+  .in-key { flex-wrap: wrap; align-items: flex-start; }
+  .in-key-body { flex-basis: calc(100% - 70px); }
+  .in-table td:last-child { min-width: 180px; }
+}
