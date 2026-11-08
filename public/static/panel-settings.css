@@ -16,3 +16,10 @@
 .se-shortcuts form .card { flex: 1; width: 100%; font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .se-shortcuts .action-text { flex: 1 1 auto; }
 .se-layout code { font-family: var(--mono); background: var(--neutral-soft); padding: 1px 5px; border-radius: 5px; }
+
+/* logo */
+.se-logo-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.se-logo-plate { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 140px;
+  min-height: 96px; display: grid; place-items: center; color: var(--muted); }
+.se-logo-plate img { display: block; max-width: 220px; max-height: 104px; width: auto; height: auto; }
+.se-logo-actions { display: grid; gap: 12px; flex: 1 1 260px; min-width: 0; }

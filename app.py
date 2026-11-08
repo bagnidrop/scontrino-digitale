@@ -21,6 +21,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import messaging
 import sections
+import logo
 from db import IntegrityError, close_db, get_db, init_db
 
 try:
@@ -371,6 +372,8 @@ def create_app(config=None):
 
     @app.before_request
     def csrf_protect():
+        if request.method == "POST" and request.path == "/dashboard/settings/logo":
+            request.max_content_length = logo.BODY_LIMIT  # il resto dell'app accetta solo richieste piccole
         if request.method == "POST" and not request.path.startswith("/api/"):
             expected = session.get("csrf", "")
             if not expected or not secrets.compare_digest(expected, request.form.get("csrf", "")):
@@ -571,8 +574,10 @@ def create_app(config=None):
     def load_receipt(token):
         return get_db().execute(
             "SELECT r.*, s.name AS shop_name, s.address AS shop_address, s.vat_number AS shop_vat,"
-            " s.review_url, s.footer_note, s.invoice_window_days"
-            " FROM receipts r JOIN shops s ON s.id = r.shop_id WHERE r.token = ?", (token,)).fetchone()
+            " s.review_url, s.footer_note, s.invoice_window_days,"
+            " l.etag AS logo_etag, l.width AS logo_w, l.height AS logo_h"
+            " FROM receipts r JOIN shops s ON s.id = r.shop_id"
+            " LEFT JOIN shop_logos l ON l.shop_id = s.id WHERE r.token = ?", (token,)).fetchone()
 
     @app.get("/r/<token>")
     def receipt_view(token):

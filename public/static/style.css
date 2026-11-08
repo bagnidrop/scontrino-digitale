@@ -111,3 +111,7 @@ tr.voided td.num { text-decoration: line-through; }
 .void-banner span { display: block; font-weight: 400; letter-spacing: 0; font-size: .85rem; margin-top: 2px; }
 .paper.voided .items, .paper.voided .total, .paper.voided .vat { opacity: .55; }
 .paper.voided .total span:last-child { text-decoration: line-through; }
+
+/* logo dell'azienda sullo scontrino: su targa bianca, così si legge anche in modalità scura */
+.paper-logo-box { display: inline-block; background: #fff; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+.paper-logo { display: block; max-width: 200px; max-height: 84px; width: auto; height: auto; }

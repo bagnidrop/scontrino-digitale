@@ -7,6 +7,7 @@
 <article class="paper{% if r.voided_at %} voided{% endif %}">
   {% if r.voided_at %}<p class="void-banner" role="status">SCONTRINO ANNULLATO<span>Il locale ha annullato questo scontrino: non è valido.</span></p>{% endif %}
   <header class="paper-head">
+    {% if r.logo_etag %}<div class="paper-logo-box"><img class="paper-logo" src="{{ url_for('logo_image', etag=r.logo_etag) }}" alt="Logo di {{ r.shop_name }}" width="{{ r.logo_w }}" height="{{ r.logo_h }}"></div>{% endif %}
     <h1>{{ r.shop_name }}</h1>
     {% if r.shop_address %}<p>{{ r.shop_address }}</p>{% endif %}
     {% if r.shop_vat %}<p>P.IVA {{ r.shop_vat }}</p>{% endif %}

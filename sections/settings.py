@@ -6,8 +6,10 @@ Questo modulo NON deve importare `app` (importazione circolare).
 """
 import re
 
-from flask import flash, g, redirect, render_template, request, session, url_for
+from flask import Response, abort, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
+
+import logo
 
 TABS = [("locale", "Locale"), ("messaggio", "Messaggio ai clienti"), ("fatture", "Fatture"), ("account", "Account e sicurezza")]
 TAB_KEYS = [k for k, _ in TABS]
@@ -46,8 +48,10 @@ def register(app, ctx):
         sample_link = base_url() + "/r/" + SAMPLE_TOKEN
         preview = messaging.render_template_text(v["message_template"], s["name"] or "", sample_link)
         tab_items = [(label, url_for("settings", tab=k), k == tab, None) for k, label in TABS]
+        shop_logo = db.execute("SELECT etag, width, height, updated_at FROM shop_logos WHERE shop_id = ?",
+                               (sid,)).fetchone()
         html = render_template(
-            "panel/settings.html", tab=tab, tab_items=tab_items, s=s, v=v, errors=errors or {},
+            "panel/settings.html", tab=tab, tab_items=tab_items, s=s, v=v, errors=errors or {}, shop_logo=shop_logo,
             new_key=session.pop("new_api_key", None), base_url=base_url(), preview=preview,
             sample_link=sample_link, default_template=DEFAULT_TEMPLATE)
         return html, status
@@ -117,6 +121,49 @@ def register(app, ctx):
 
         flash("Controlla i campi evidenziati: non ho salvato nulla.", "err")
         return render_page(tab, values, errors, 400)
+
+    # ------------------------------------------------------------------ logo dell'azienda
+    @app.post("/dashboard/settings/logo")
+    @login_required
+    def settings_logo():
+        """Carica (o sostituisce) il logo. Il file viene controllato e ricodificato: vedi logo.py."""
+        f = request.files.get("logo")
+        raw = f.read(logo.MAX_UPLOAD + 1) if f else b""
+        try:
+            data, width, height, etag = logo.process_logo(raw)
+        except logo.LogoError as e:
+            flash(str(e), "err")
+            return redirect(url_for("settings", tab="locale"))
+        db = get_db()
+        sid = g.panel_shop["id"]
+        db.execute("DELETE FROM shop_logos WHERE shop_id = ?", (sid,))
+        db.execute("INSERT INTO shop_logos (shop_id, data, width, height, etag, updated_at)"
+                   " VALUES (?,?,?,?,?,?)", (sid, data, width, height, etag, ctx.now_iso()))
+        db.commit()
+        flash("Logo aggiornato: da ora compare in cima agli scontrini.", "ok")
+        return redirect(url_for("settings", tab="locale"))
+
+    @app.post("/dashboard/settings/logo/delete")
+    @login_required
+    def settings_logo_delete():
+        db = get_db()
+        db.execute("DELETE FROM shop_logos WHERE shop_id = ?", (g.panel_shop["id"],))
+        db.commit()
+        flash("Logo rimosso.", "ok")
+        return redirect(url_for("settings", tab="locale"))
+
+    @app.get("/logo/<etag>.png")
+    def logo_image(etag):
+        """Pubblico: l'indirizzo dipende dal contenuto (non dall'azienda), quindi non si può indovinare
+        né elencare, e può essere memorizzato per sempre: se il logo cambia, cambia l'indirizzo."""
+        if not re.fullmatch(r"[0-9a-f]{24}", etag):
+            abort(404)
+        row = get_db().execute("SELECT data FROM shop_logos WHERE etag = ? LIMIT 1", (etag,)).fetchone()
+        if row is None:
+            abort(404)
+        resp = Response(bytes(row["data"]), mimetype="image/png")
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
 
     @app.post("/dashboard/settings/password")
     @login_required

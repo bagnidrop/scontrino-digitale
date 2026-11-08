@@ -61,6 +61,14 @@ Risposta `201` con `token`, `url` (da stampare come QR) e `qr_svg_url`.
 | `/dashboard` | Statistiche, scontrino di prova, guida di collegamento |
 | `/dashboard/receipts`, `/invoices`, `/contacts`, `/settings` | Storico, richieste fattura (con export CSV), contatti con consenso, personalizzazione e API key |
 
+## Logo dell'azienda
+
+Ogni azienda carica il proprio logo da **Impostazioni → Locale → Logo** (PNG, JPG o WebP, fino a 2 MB; la trasparenza è supportata). Compare in cima allo scontrino che vede il cliente, su una piastra bianca così resta leggibile anche in modalità scura.
+
+- Il file non viene mai servito com'è: viene ricodificato in PNG (max 480 px), eliminando metadati e contenuti nascosti. L'SVG è rifiutato perché può contenere script.
+- Il logo è salvato nel database (tabella `shop_logos`, creata da sola all'avvio) e servito a un indirizzo pubblico con cache lunga; cambiando logo cambia l'indirizzo.
+- Si può sostituire o rimuovere in qualsiasi momento; eliminando l'azienda sparisce anche il logo.
+
 ## Configurazione (variabili d'ambiente)
 
 | Variabile | Significato |
