@@ -1,0 +1,144 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, badge, empty_state, tabs with context %}
+{% block title %}Panoramica servizio{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-admin-overview.css') }}">{% endblock %}
+
+{% block content %}
+{% call page_head("Panoramica servizio", "Come vanno le aziende che usano il gestionale.") %}
+  {% if not empty %}<div class="ao-period" role="group" aria-label="Periodo">{{ tabs(period_tabs) }}</div>{% endif %}
+  <a class="btn btn-primary" href="{{ new_company_url }}">{{ icon('plus', 16) }} Nuova azienda</a>
+{% endcall %}
+
+{% if empty %}
+<div class="card ao-empty">
+  {{ empty_state("Non hai ancora nessuna azienda", "Crea la prima azienda e ricevi un link d'invito da girarle: scelta la password, potrà emettere subito i suoi scontrini digitali.", new_company_url, "Crea la prima azienda", 'building') }}
+</div>
+<ol class="ao-how list-plain">
+  <li><span class="ao-how-n" aria-hidden="true">1</span><span><strong>Crei l'azienda</strong><span class="muted"> con nome ed email.</span></span></li>
+  <li><span class="ao-how-n" aria-hidden="true">2</span><span><strong>Giri il link d'invito</strong><span class="muted"> valido {{ invite_days }} giorni, monouso.</span></span></li>
+  <li><span class="ao-how-n" aria-hidden="true">3</span><span><strong>Lei sceglie la password</strong><span class="muted"> e inizia a emettere scontrini.</span></span></li>
+</ol>
+{% else %}
+<div class="stack ao-stack">
+
+  <section aria-labelledby="ao-co-h">
+    <div class="section-head"><h2 id="ao-co-h">Le aziende</h2><a href="{{ url_for('admin_companies') }}">Vedi l'elenco →</a></div>
+    <div class="ao-stats ao-stats-5">
+      {% for c in status_cards %}{{ stat_card(c.href, c.label, c.value, c.sub, c.icon, c.tone, c.hint) }}{% endfor %}
+    </div>
+  </section>
+
+  <section aria-labelledby="ao-use-h">
+    <div class="section-head"><h2 id="ao-use-h">Uso del servizio {{ noun }}</h2></div>
+    <div class="ao-stats ao-stats-5">
+      {% for c in usage_cards %}{{ stat_card(c.href, c.label, (c.value|euro) if c.money else c.value, c.sub, c.icon, c.tone, c.hint) }}{% endfor %}
+    </div>
+  </section>
+
+  <section aria-labelledby="ao-chart-h">
+    <a class="card is-link ao-chart-card" href="{{ activity_sort_url }}">
+      <span class="card-head">
+        <span>
+          <h2 id="ao-chart-h">Scontrini emessi al giorno</h2>
+          <span class="muted small ao-sub"><strong>{{ total_cur }}</strong> {{ 'scontrino' if total_cur == 1 else 'scontrini' }} {{ noun }}, tutte le aziende insieme.</span>
+        </span>
+      </span>
+      {% if total_cur %}
+      <svg class="chart ao-chart" viewBox="0 0 {{ chart.W }} {{ chart.H }}" role="img" aria-label="Scontrini emessi al giorno {{ noun }}: {{ total_cur }} in totale.">
+        {% for gr in chart.grid %}
+        <line class="grid-line" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ gr.y }}" y2="{{ gr.y }}"/>
+        <text x="{{ chart.left - 8 }}" y="{{ gr.y + 4 }}" text-anchor="end">{{ gr.label }}</text>
+        {% endfor %}
+        {% for d in chart.days %}
+        {% if d.count %}<rect class="bar{% if d.is_today %} ao-today{% endif %}" x="{{ d.x }}" y="{{ d.y }}" width="{{ d.w }}" height="{{ d.h }}" rx="3"><title>{{ d.long }}: {{ d.count }} scontrini</title></rect>
+        {% else %}<rect class="bar-soft" x="{{ d.x }}" y="{{ d.y - 3 }}" width="{{ d.w }}" height="3" rx="1.5"/>{% endif %}
+        {% if d.show %}
+        <text x="{{ d.cx }}" y="{{ chart.label_y }}" text-anchor="middle">{{ d.lbl }}</text>
+        {% if chart.days|length <= 7 %}<text x="{{ d.cx }}" y="{{ chart.label_y2 }}" text-anchor="middle">{{ d.wd }}</text>{% endif %}
+        {% endif %}
+        {% endfor %}
+      </svg>
+      {% else %}
+      <span class="muted">Nessuno scontrino {{ noun }}. Quando le aziende inizieranno a emetterli, li vedrai qui.</span>
+      {% endif %}
+      <span class="card-go" aria-hidden="true">Aziende per attività {{ icon('chevron', 16) }}</span>
+    </a>
+  </section>
+
+  <div class="grid split ao-split">
+    <section aria-labelledby="ao-att-h">
+      <div class="section-head">
+        <h2 id="ao-att-h">Richiede attenzione{% if follow_total %} <span class="ao-count">{{ follow_total }}</span>{% endif %}</h2>
+      </div>
+      {% if follow %}
+      <ul class="ao-list list-plain">
+        {% for f in follow %}
+        <li>
+          <a class="card is-link action-card tone-{{ f.tone }}" href="{{ f.url }}">
+            <span class="action-icon">{{ icon(f.icon, 22) }}</span>
+            <span class="action-text"><strong>{{ f.name }}</strong><span>{{ f.text }}</span></span>
+            {{ badge(f.label, f.tone) }}
+            <span class="card-go" aria-hidden="true">{{ icon('chevron', 16) }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if follow_more %}<p class="ao-more"><a href="{{ at_risk_url }}">Altre {{ follow_more }} da controllare →</a></p>{% endif %}
+      {% else %}
+      <div class="callout"><span>{{ icon('check', 20) }}</span><span><strong>Tutto in ordine.</strong> Nessun invito fermo, nessuna azienda ferma, nessun invio fallito.</span></div>
+      {% endif %}
+    </section>
+
+    <section aria-labelledby="ao-top-h">
+      <div class="section-head"><h2 id="ao-top-h">Le più attive</h2><a href="{{ activity_sort_url }}">Tutte →</a></div>
+      {% if top %}
+      <ol class="ao-top list-plain">
+        {% for t in top %}
+        <li>
+          <a class="card is-link ao-top-row" href="{{ t.url }}">
+            <span class="ao-top-n" aria-hidden="true">{{ loop.index }}</span>
+            <span class="ao-top-body">
+              <span class="ao-top-line"><strong class="ao-top-name">{{ t.name }}</strong>
+                <span class="small nowrap"><strong>{{ t.count }}</strong> <span class="muted">{{ 'scontrino' if t.count == 1 else 'scontrini' }}</span></span></span>
+              <svg class="ao-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-soft" x="0" y="0" width="100" height="6" rx="3"/><rect class="bar" x="0" y="0" width="{{ t.pct }}" height="6" rx="3"/></svg>
+              {% if t.last %}<span class="muted small">Ultimo scontrino: {{ t.last }}</span>{% endif %}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <a class="card is-link ao-quiet" href="{{ activity_sort_url }}">
+        <span class="muted">Nessuno scontrino {{ noun }}: la classifica compare appena le aziende iniziano a emetterli.</span>
+        <span class="card-go" aria-hidden="true">Vedi le aziende {{ icon('chevron', 16) }}</span>
+      </a>
+      {% endif %}
+    </section>
+  </div>
+
+  <section aria-labelledby="ao-rec-h">
+    <div class="section-head"><h2 id="ao-rec-h">Ultime attività</h2><a href="{{ activity_url }}">Tutto il registro →</a></div>
+    {% if recent %}
+    <div class="card flush">
+      <div class="table-wrap">
+        <table class="table ao-cards">
+          <thead><tr><th scope="col">Quando</th><th scope="col">Cosa è successo</th></tr></thead>
+          <tbody>
+            {% for e in recent %}
+            <tr data-href="{{ e.url or activity_url }}">
+              <td class="nowrap"><a href="{{ activity_url }}">{{ e.at|dt }}</a></td>
+              <td>{{ badge(e.label, e.tone) }}
+                {% if e.has_target %}{% if e.url %}<a href="{{ e.url }}"><strong>{{ e.name }}</strong></a>{% else %}<strong>{{ e.name or 'azienda' }}</strong>{% if e.deleted %} <span class="muted small">(eliminata)</span>{% endif %}{% endif %}{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <a class="card is-link ao-quiet" href="{{ activity_url }}"><span class="muted">Ancora nessuna attività registrata.</span><span class="card-go" aria-hidden="true">Apri il registro {{ icon('chevron', 16) }}</span></a>
+    {% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

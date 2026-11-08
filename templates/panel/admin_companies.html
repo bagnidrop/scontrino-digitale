@@ -1,0 +1,72 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, badge, empty_state, tabs, pager with context %}
+{% block title %}Aziende{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-admin-companies.css') }}">{% endblock %}
+{% block content %}
+{% call page_head("Aziende", "I tuoi clienti: chi usa il servizio, chi è ancora da invitare e chi ha smesso di usarlo.") %}
+  <a class="btn btn-primary" href="{{ url_for('admin_company_new') }}">{{ icon('plus', 16) }} Nuova azienda</a>
+{% endcall %}
+
+<div class="stack">
+  <div class="card ac-filters">
+    {{ tabs(tab_items) }}
+    <form class="ac-form" method="get" action="{{ url_for('admin_companies') }}" role="search">
+      {% if status != 'all' %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+      <label class="field ac-q"><span class="sr-only">Cerca per nome o email</span>
+        <input class="input" type="search" name="q" value="{{ q }}" maxlength="80" placeholder="Cerca per nome o email…" aria-label="Cerca per nome o email">
+      </label>
+      <label class="field"><span class="sr-only">Ordina per</span>
+        <select class="select" name="sort" data-autosubmit aria-label="Ordina per">
+          <option value="recent"{% if sort == 'recent' %} selected{% endif %}>Più recenti</option>
+          <option value="name"{% if sort == 'name' %} selected{% endif %}>Nome (A-Z)</option>
+          <option value="activity"{% if sort == 'activity' %} selected{% endif %}>Più attive</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">{{ icon('search', 16) }} Cerca</button>
+      {% if has_filters or sort != 'recent' %}<a class="btn btn-ghost" href="{{ clear_url }}">Azzera</a>{% endif %}
+    </form>
+  </div>
+
+  {% if rows %}
+  <div class="card flush">
+    <div class="table-wrap">
+      <table class="table ac-table">
+        <caption class="sr-only">Elenco aziende: {{ total }} risultati</caption>
+        <thead><tr>
+          <th scope="col">Azienda</th><th scope="col">Stato</th><th scope="col">Creata il</th>
+          <th scope="col">Ultimo accesso</th><th scope="col">Ultimo scontrino</th>
+          <th scope="col" class="num">Scontrini 30 gg</th><th scope="col" class="num">Messaggi 30 gg</th>
+        </tr></thead>
+        <tbody>
+        {% for c in rows %}
+        {% set st = STATUS_LABELS.get(c.status, (c.status, 'neutral')) %}
+        <tr data-href="{{ url_for('admin_company_detail', cid=c.id) }}">
+          <td class="ac-name-cell">
+            <a class="ac-name" href="{{ url_for('admin_company_detail', cid=c.id) }}">{{ c.name }}</a>
+            <span class="cell-sub">{{ c.email }}</span>
+          </td>
+          <td data-label="Stato">{{ badge(st[0], st[1]) }}{% if c.inactive %} {{ badge("Ferma da " ~ inactive_days ~ " giorni", "warn") }}{% endif %}</td>
+          <td data-label="Creata il" class="nowrap">{{ c.created_at|dt('%d/%m/%Y') }}</td>
+          <td data-label="Ultimo accesso" class="nowrap">{% if c.last_login_at %}{{ c.last_login_at|dt }}{% else %}<span class="muted">mai</span>{% endif %}</td>
+          <td data-label="Ultimo scontrino" class="nowrap">{% if c.last_receipt %}{{ c.last_receipt|dt }}{% else %}<span class="muted">nessuno</span>{% endif %}</td>
+          <td data-label="Scontrini 30 gg" class="num">{{ c.receipts30 }}</td>
+          <td data-label="Messaggi 30 gg" class="num">{{ c.messages30 }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="muted small">{{ total }} {{ 'azienda' if total == 1 else 'aziende' }}{% if has_filters %} con questi filtri{% endif %}.</p>
+  {{ pager(page, pages, 'admin_companies') }}
+  {% elif counts.all == 0 %}
+  <div class="card">
+    {{ empty_state("Non hai ancora nessuna azienda", "Crea l'account della prima azienda: riceverai un link da girarle per WhatsApp o email, e lei sceglierà la sua password.", url_for('admin_company_new'), "Crea la prima azienda", "building") }}
+  </div>
+  {% else %}
+  <div class="card">
+    {{ empty_state("Nessuna azienda trovata", "Prova a cambiare scheda o a cercare in un altro modo.", clear_url, "Mostra tutte", "search") }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -70,13 +70,24 @@ Risposta `201` con `token`, `url` (da stampare come QR) e `qr_svg_url`.
 | `PUBLIC_BASE_URL` | Dominio pubblico usato nei link, es. `https://scontrini.miodominio.it` |
 | `COOKIE_SECURE=1` | Cookie solo HTTPS (da attivare in produzione) |
 | `BEHIND_PROXY=1` | Se sta dietro a nginx/Caddy/un load balancer |
-| `ALLOW_REGISTRATION=0` | Chiude la registrazione libera (utile per un lancio su invito) |
+| `OWNER_EMAIL` | Email del **proprietario del servizio** (più email separate da virgola). Attiva l'area `/admin` e chiude la registrazione libera |
+| `ALLOW_REGISTRATION` | `1` apre / `0` chiude la registrazione libera. Con `OWNER_EMAIL` impostata il valore predefinito è `0` |
 | `MESSAGING_PROVIDER` | `console` (default, prova) oppure `twilio` |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Credenziali Twilio |
 | `TWILIO_WHATSAPP_FROM`, `TWILIO_SMS_FROM` | Numeri mittente |
 | `TWILIO_WHATSAPP_CONTENT_SID` | Template WhatsApp approvato (2 variabili: negozio, link) |
 
 **WhatsApp:** per scrivere a un cliente che non ti ha contattato nelle ultime 24 ore servono template approvati da Meta e l'opt-in del cliente. Per un test iniziale usa la sandbox Twilio.
+
+## Proprietario del servizio e aziende clienti
+
+Tu sei il **proprietario**; ogni locale è un'**azienda** con il suo account e i suoi dati separati.
+
+1. Imposta `OWNER_EMAIL` con l'email di un account **già registrato** (se non ne hai uno: metti `ALLOW_REGISTRATION=1`, registrati, poi rimetti `0`). Non si diventa proprietari registrandosi.
+2. Entra con quell'account: nel menu compare il gruppo **Amministrazione** (Panoramica servizio, Aziende, Registro attività). Per tutti gli altri `/admin` risponde 404.
+3. **Aziende → Nuova azienda**: inserisci nome ed email del titolare. Ottieni un **link d'invito** (monouso, scade in 7 giorni) e un messaggio pronto da copiare. Il titolare sceglie la password da solo e riceve la sua chiave API: tu non vedi mai le password.
+4. Dal dettaglio di un'azienda puoi **sospenderla** (accesso e API bloccati, i dati restano), riattivarla, mandare un nuovo link (password dimenticata), annotare note, **entrare come lei** per assistenza (con avviso a schermo e registro) o **eliminarla** con tutti i suoi dati.
+5. Ogni azione resta nel **Registro attività**.
 
 ## Pubblicazione su Vercel (con database Postgres)
 

@@ -1,0 +1,142 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, stat_card, badge, empty_state with context %}
+{% block title %}{{ shop.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-admin-companies.css') }}">{% endblock %}
+{% macro usage_card(goto, label, value, sub, icon_name, tone) -%}
+  {% if shop.status == 'active' %}
+  <form method="post" action="{{ url_for('admin_company_impersonate', cid=shop.id) }}" class="ac-usage-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="goto" value="{{ goto }}">
+    <button type="submit" class="card is-link stat-card ac-usage tone-{{ tone }}">
+      <span class="stat-top"><span class="stat-label">{{ label }}</span><span class="stat-icon">{{ icon(icon_name, 18) }}</span></span>
+      <span class="stat-value">{{ value }}</span>
+      <span class="stat-sub">{{ sub }}</span>
+      <span class="card-go" aria-hidden="true">Guarda nel suo pannello {{ icon('chevron', 16) }}</span>
+    </button>
+  </form>
+  {% else %}
+  <a class="card is-link stat-card ac-usage tone-{{ tone }}" href="#azioni">
+    <span class="stat-top"><span class="stat-label">{{ label }}</span><span class="stat-icon">{{ icon(icon_name, 18) }}</span></span>
+    <span class="stat-value">{{ value }}</span>
+    <span class="stat-sub">{{ sub }}</span>
+    <span class="card-go" aria-hidden="true">Vedi cosa puoi fare {{ icon('chevron', 16) }}</span>
+  </a>
+  {% endif %}
+{%- endmacro %}
+{% block content %}
+{% call page_head(shop.name, shop.email) %}
+  <a class="btn btn-secondary" href="{{ url_for('admin_companies') }}">← Tutte le aziende</a>
+{% endcall %}
+
+<div class="stack">
+  <div class="card ac-hero">
+    <div class="ac-hero-main">
+      <span class="avatar ac-avatar" aria-hidden="true">{{ shop.name[:1]|upper }}</span>
+      <div>
+        <div class="row">{{ badge(status_label, status_tone) }}
+          {% if shop.status == 'invited' %}<span class="muted small">{% if expired %}Invito scaduto: genera un nuovo link.{% else %}Invito valido fino al {{ shop.invite_expires_at|dt }}.{% endif %}</span>{% endif %}
+          {% if shop.status == 'suspended' %}<span class="muted small">Non può entrare né inviare scontrini.</span>{% endif %}
+        </div>
+        <p class="muted small">Cliente dal {{ shop.created_at|dt('%d/%m/%Y') }}</p>
+      </div>
+    </div>
+    <div class="ac-hero-actions" id="azioni">
+      {% if shop.status == 'active' %}
+      <form method="post" action="{{ url_for('admin_company_impersonate', cid=shop.id) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit">{{ icon('eye', 16) }} Entra come questa azienda</button>
+      </form>
+      <form method="post" action="{{ url_for('admin_company_suspend', cid=shop.id) }}" data-confirm="Sospendere {{ shop.name }}? Non potrà più entrare nel suo pannello né inviare scontrini dall'API. I link ai suoi scontrini restano visibili ai clienti. Potrai riattivarla quando vuoi.">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-secondary" type="submit">Sospendi</button>
+      </form>
+      {% elif shop.status == 'suspended' %}
+      <form method="post" action="{{ url_for('admin_company_activate', cid=shop.id) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit">{{ icon('undo', 16) }} Riattiva</button>
+      </form>
+      {% endif %}
+      {% if shop.status != 'suspended' %}
+      <form method="post" action="{{ url_for('admin_company_invite', cid=shop.id) }}"{% if shop.status == 'active' %} data-confirm="Generare un link per reimpostare la password di {{ shop.name }}? La sua password attuale resta valida finché non usa il link."{% endif %}>
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-secondary" type="submit">{{ icon('key', 16) }} {{ "Rigenera invito" if shop.status == 'invited' else "Reimposta password" }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <section aria-label="Uso del servizio">
+    <div class="section-head"><h2>Come sta usando il servizio</h2><span class="muted small">Solo numeri, mai i dati dei suoi clienti</span></div>
+    <div class="grid cols-4">
+      {{ usage_card('receipts', "Scontrini · 30 giorni", usage.receipts30, "Emessi, esclusi gli annullati", "receipt", "brand") }}
+      {{ usage_card('messages', "Messaggi · 30 giorni", usage.messages30, "Scontrini inviati ai clienti", "message", "info") }}
+      {{ usage_card('invoices', "Fatture da evadere", usage.invoices_new, "Richieste in attesa", "file", "warn" if usage.invoices_new else "neutral") }}
+      {{ usage_card('contacts', "Clienti con consenso", usage.contacts, "Contatti salvati con il consenso", "users", "neutral") }}
+    </div>
+  </section>
+
+  <div class="grid split">
+    <div class="stack">
+      <section class="card" id="note" aria-labelledby="ac-note-h">
+        <div class="card-head"><h2 id="ac-note-h">Note interne</h2><span class="muted small">Le vedi solo tu</span></div>
+        <form class="stack-sm" method="post" action="{{ url_for('admin_company_notes', cid=shop.id) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <label class="sr-only" for="ac-notes">Note interne</label>
+          <textarea class="textarea" id="ac-notes" name="notes" rows="4" maxlength="500" placeholder="Referente, accordi, promemoria…">{{ shop.owner_notes }}</textarea>
+          <div class="form-actions"><button class="btn btn-secondary btn-sm" type="submit">{{ icon('check', 16) }} Salva le note</button></div>
+        </form>
+      </section>
+
+      <section class="card flush" aria-labelledby="ac-act-h">
+        <div class="card-head ac-pad"><h2 id="ac-act-h">Ultime attività</h2>
+          <a class="small" href="{{ url_for('admin_activity', q=shop.name) }}">Tutto il registro</a></div>
+        {% if activity %}
+        <ul class="list-plain ac-activity">
+          {% for a in activity %}
+          <li><span class="ac-act-what">{{ ACTION_LABELS.get(a.action, a.action) }}</span>
+            {% if a.detail and a.action not in ACTION_LABELS %}<span class="muted small">{{ a.detail }}</span>{% endif %}
+            <span class="muted small">{{ a.created_at|dt }}{% if a.actor_email %} · {{ a.actor_email }}{% endif %}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted ac-pad">Ancora nessuna attività registrata per questa azienda.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card" aria-labelledby="ac-info-h">
+        <div class="card-head"><h2 id="ac-info-h">Informazioni</h2></div>
+        <dl class="kv">
+          <dt>Email</dt><dd>{{ shop.email }}</dd>
+          <dt>Creata il</dt><dd>{{ shop.created_at|dt }}</dd>
+          <dt>Ultimo accesso</dt><dd>{% if shop.last_login_at %}{{ shop.last_login_at|dt }}{% else %}Mai{% endif %}</dd>
+          <dt>Ultimo scontrino</dt><dd>{% if usage.last_receipt %}{{ usage.last_receipt|dt }}{% else %}Nessuno{% endif %}</dd>
+          {% if shop.invite_expires_at %}<dt>Invito valido fino al</dt><dd>{{ shop.invite_expires_at|dt }}{% if expired %} {{ badge("scaduto", "warn") }}{% endif %}</dd>{% endif %}
+        </dl>
+      </section>
+    </div>
+  </div>
+
+  <section class="card ac-danger" id="zona-pericolosa" aria-labelledby="ac-danger-h">
+    <div class="card-head"><h2 id="ac-danger-h">{{ icon('alert', 20) }} Zona pericolosa: elimina l'azienda</h2></div>
+    <p>Eliminando <strong>{{ shop.name }}</strong> perdi per sempre:</p>
+    <ul class="ac-lose">
+      <li><strong>{{ usage.receipts_all }}</strong> {{ 'scontrino' if usage.receipts_all == 1 else 'scontrini' }}</li>
+      <li><strong>{{ usage.invoices_all }}</strong> {{ 'richiesta di fattura' if usage.invoices_all == 1 else 'richieste di fattura' }}</li>
+      <li><strong>{{ usage.contacts }}</strong> {{ 'contatto' if usage.contacts == 1 else 'contatti' }} dei clienti, con i messaggi inviati</li>
+    </ul>
+    <p class="muted small">I link ai suoi scontrini smetteranno di funzionare. Non si può annullare.</p>
+    <form class="ac-delete-form" method="post" action="{{ url_for('admin_company_delete', cid=shop.id) }}" data-confirm="Eliminare definitivamente {{ shop.name }} e tutti i suoi dati? Non si può annullare.">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="form-grid">
+        <div class="field"><label for="ac-del-name">Per confermare, scrivi il nome esatto: <span class="mono">{{ shop.name }}</span></label>
+          <input class="input" id="ac-del-name" name="confirm_name" autocomplete="off" required></div>
+        <div class="field"><label for="ac-del-pw">La tua password</label>
+          <input class="input" id="ac-del-pw" name="password" type="password" autocomplete="current-password" required></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-danger" type="submit">{{ icon('trash', 16) }} Elimina per sempre</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

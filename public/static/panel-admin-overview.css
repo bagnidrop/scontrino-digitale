@@ -1,0 +1,81 @@
+/* Amministrazione · Panoramica servizio e Registro attività. Prefisso .ao- ; solo variabili del design system. */
+.ao-stack { gap: 28px; }
+.ao-period { max-width: 100%; }
+.ao-stats { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.section-head h2 { margin: 0; }
+.ao-count { display: inline-block; min-width: 1.6em; padding: 0 8px; border-radius: 999px; background: var(--brand-soft);
+  color: var(--brand); font-size: .85rem; text-align: center; vertical-align: middle; }
+.ao-sub { display: block; margin-top: 2px; }
+
+/* Grafico */
+.ao-chart { max-height: 300px; }
+.ao-chart .bar { fill: var(--brand); opacity: .8; }
+.ao-chart .bar.ao-today { fill: var(--accent); opacity: 1; }
+.ao-chart .bar-soft { fill: var(--line-strong); }
+.ao-chart-card:hover .bar { opacity: 1; }
+
+/* Due colonne */
+.ao-split { align-items: start; }
+.ao-split > section { min-width: 0; }
+.ao-list { display: grid; gap: 12px; }
+.ao-list li, .ao-top li { padding: 0; border: 0; }
+.ao-list .action-text { flex: 1 1 auto; min-width: 0; }
+.ao-list .badge { flex: none; }
+.ao-more { margin-top: 10px; }
+.ao-top { display: grid; gap: 10px; }
+.card.is-link.ao-top-row { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; }
+.ao-top-n { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand); font-weight: 750; font-size: .9rem; }
+.ao-top-body { flex: 1 1 auto; min-width: 0; display: grid; gap: 6px; }
+.ao-top-line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.ao-top-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ao-bar { display: block; width: 100%; height: 6px; }
+.ao-bar .bar { fill: var(--brand); }
+.ao-bar .bar-soft { fill: var(--line); }
+.card.is-link.ao-quiet { display: flex; flex-direction: column; gap: 10px; }
+
+/* Stato vuoto */
+.ao-empty { padding: 12px; }
+.ao-how { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 18px; }
+.ao-how li { display: flex; gap: 12px; align-items: flex-start; padding: 0; border: 0; }
+.ao-how-n { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand); border: 2px solid var(--brand); font-weight: 750; }
+
+/* Registro */
+.ao-search { justify-content: flex-start; margin-bottom: 0; }
+.ao-q { flex: 1 1 260px; max-width: 420px; margin: 0; }
+.ao-detail { max-width: 360px; overflow-wrap: anywhere; }
+.ao-log td { vertical-align: top; }
+.ao-show-sm { display: none; }
+
+@media (max-width: 1100px) { .ao-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 820px) { .ao-how { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .ao-stats { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ao-stats .stat-card { min-height: 0; }
+  .ao-chart text { font-size: 19px; }
+  .ao-hide-sm { display: none; }
+  .ao-show-sm { display: block; }
+  .ao-list .badge { display: none; }
+  .ao-search .btn { flex: 1 1 auto; }
+}
+@media (max-width: 820px) {
+  main .btn, main .tab { min-height: 44px; }
+  .section-head a, main .card-head .card-go { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+/* righe "Richiede attenzione": icona, testo e badge sulla stessa riga */
+.ao-list .card.is-link.action-card { display: flex; flex-direction: row; align-items: center; }
+.ao-log .ao-show-sm { display: none; }
+@media (max-width: 560px) { .ao-log .ao-show-sm { display: block; } }
+
+/* telefono: ogni riga delle tabelle diventa una piccola scheda, senza scroll orizzontale */
+@media (max-width: 560px) {
+  .ao-cards, .ao-cards tbody, .ao-cards tr, .ao-cards td { display: block; width: 100%; }
+  .ao-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ao-cards tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .ao-cards td { padding: 2px 0; border: 0; }
+  .ao-cards .badge { white-space: normal; }
+  .ao-log td:first-child, .ao-cards td:first-child { color: var(--muted); font-size: .88rem; }
+}
+@media (max-width: 560px) { .ao-cards td.ao-hide-sm { display: none; } }

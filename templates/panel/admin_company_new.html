@@ -1,0 +1,71 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, badge with context %}
+{% block title %}{% if mode == 'success' %}Link d'invito{% else %}Nuova azienda{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-admin-companies.css') }}">{% endblock %}
+{% block content %}
+{% if mode == 'success' %}
+{% call page_head(("Nuova password per " if reset else "Azienda creata: ") ~ shop.name, "Gira il link all'azienda: può usarlo una sola volta.") %}
+  <a class="btn btn-secondary" href="{{ url_for('admin_company_detail', cid=shop.id) }}">Vai al dettaglio</a>
+{% endcall %}
+<div class="stack">
+  <div class="callout warn" role="alert">{{ icon('alert', 20) }}
+    <span><strong>Copia il link adesso: lo vedi solo questa volta.</strong> Se esci da questa pagina o la ricarichi, sparisce.
+      Nessun problema: dal dettaglio dell'azienda puoi generarne uno nuovo quando vuoi.</span></div>
+
+  <section class="card ac-invite" aria-labelledby="ac-invite-h">
+    <h2 id="ac-invite-h">Link d'invito</h2>
+    <p class="ac-link mono" id="ac-link">{{ invite_url }}</p>
+    <div class="row">
+      <button class="btn btn-primary" type="button" data-copy="#ac-link">{{ icon('copy', 16) }} Copia il link</button>
+      <span class="muted small">{{ icon('clock', 14) }} Scade il <strong>{{ expires_at|dt }}</strong> e funziona una volta sola.</span>
+    </div>
+  </section>
+
+  <section class="card ac-invite" aria-labelledby="ac-msg-h">
+    <h2 id="ac-msg-h">Messaggio già pronto</h2>
+    <p class="muted">Incollalo su WhatsApp o in una email: contiene già il nome dell'azienda e il link.</p>
+    <pre class="code ac-msg" id="ac-msg">{{ invite_text }}</pre>
+    <div class="row">
+      <button class="btn btn-secondary" type="button" data-copy="#ac-msg">{{ icon('copy', 16) }} Copia il messaggio</button>
+      <a class="btn btn-secondary" href="{{ wa_url }}" target="_blank" rel="noopener">{{ icon('send', 16) }} Apri WhatsApp</a>
+      <a class="btn btn-secondary" href="{{ mail_url }}">{{ icon('message', 16) }} Scrivi una email</a>
+    </div>
+  </section>
+
+  <div class="row">
+    <a class="btn btn-ghost" href="{{ url_for('admin_companies') }}">← Tutte le aziende</a>
+    <a class="btn btn-ghost" href="{{ url_for('admin_company_new') }}">{{ icon('plus', 16) }} Crea un'altra azienda</a>
+  </div>
+</div>
+{% else %}
+{% call page_head("Nuova azienda", "Crea l'account di un cliente. Poi riceverai un link da girargli: sarà lui a scegliere la password.") %}
+  <a class="btn btn-secondary" href="{{ url_for('admin_companies') }}">← Tutte le aziende</a>
+{% endcall %}
+<form class="card ac-newform stack" method="post" action="{{ url_for('admin_company_new') }}" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="field">
+    <label for="ac-name">Nome dell'azienda o del locale</label>
+    <input class="input" id="ac-name" name="name" value="{{ form.name }}" maxlength="120" required autofocus
+           placeholder="Trattoria Da Mario"{% if errors.name %} aria-invalid="true" aria-describedby="ac-name-err"{% endif %}>
+    {% if errors.name %}<span class="ac-err" id="ac-name-err">{{ errors.name }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="ac-email">Email di accesso</label>
+    <input class="input" id="ac-email" name="email" type="email" value="{{ form.email }}" maxlength="254" required
+           autocomplete="off" placeholder="info@trattoria.it"{% if errors.email %} aria-invalid="true" aria-describedby="ac-email-err"{% endif %}>
+    <span class="hint">Con questa email l'azienda entrerà nel suo pannello.</span>
+    {% if errors.email %}<span class="ac-err" id="ac-email-err">{{ errors.email }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="ac-notes">Note interne (facoltative)</label>
+    <textarea class="textarea" id="ac-notes" name="notes" maxlength="500" rows="3"
+              placeholder="Es. referente, accordi, piano concordato…"{% if errors.notes %} aria-invalid="true"{% endif %}>{{ form.notes }}</textarea>
+    <span class="hint">Le vedi solo tu: l'azienda non le vede mai.</span>
+    {% if errors.notes %}<span class="ac-err">{{ errors.notes }}</span>{% endif %}
+  </div>
+  <div class="callout">{{ icon('info', 20) }}<span>Dopo aver creato l'azienda ti mostriamo un <strong>link d'invito valido {{ invite_days }} giorni</strong>, una volta sola.</span></div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 16) }} Crea azienda e genera il link</button>
+    <a class="btn btn-ghost" href="{{ url_for('admin_companies') }}">Annulla</a></div>
+</form>
+{% endif %}
+{% endblock %}

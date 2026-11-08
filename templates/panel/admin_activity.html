@@ -1,0 +1,53 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, badge, empty_state, tabs, pager with context %}
+{% block title %}Registro attività{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='panel-admin-overview.css') }}">{% endblock %}
+
+{% block content %}
+{% call page_head("Registro attività", "Tutto quello che hai fatto sulle aziende, dal più recente. Il registro non si può modificare.") %}
+  <a class="btn btn-secondary" href="{{ url_for('admin_overview') }}">{{ icon('chart', 16) }} Panoramica</a>
+{% endcall %}
+
+<div class="stack">
+  {{ tabs(filter_tabs) }}
+  <form class="toolbar ao-search" method="get" action="{{ url_for('admin_activity') }}" role="search">
+    {% if action != 'all' %}<input type="hidden" name="action" value="{{ action }}">{% endif %}
+    <div class="field ao-q">
+      <label class="sr-only" for="ao-q">Cerca nel registro</label>
+      <input class="input" id="ao-q" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Cerca per azienda o dettaglio" autocomplete="off">
+    </div>
+    <button class="btn btn-secondary" type="submit">{{ icon('search', 16) }} Cerca</button>
+    {% if filtered %}<a class="btn btn-ghost" href="{{ reset_url }}">Azzera i filtri</a>{% endif %}
+  </form>
+
+  {% if entries %}
+  <p class="muted small" aria-live="polite">{{ total }} {{ 'voce' if total == 1 else 'voci' }}{% if filtered %} con questi filtri{% endif %}.</p>
+  <div class="card flush">
+    <div class="table-wrap">
+      <table class="table ao-log ao-cards">
+        <thead><tr><th scope="col">Quando</th><th scope="col">Azione</th><th scope="col">Azienda</th><th scope="col" class="ao-hide-sm">Dettaglio</th><th scope="col" class="ao-hide-sm">Chi</th></tr></thead>
+        <tbody>
+          {% for e in entries %}
+          <tr{% if e.url %} data-href="{{ e.url }}"{% endif %}>
+            <td class="nowrap">{{ e.at|dt }}</td>
+            <td>{{ badge(e.label, e.tone) }}</td>
+            <td>{% if e.url %}<a href="{{ e.url }}"><strong>{{ e.name }}</strong></a>
+              {% elif e.has_target %}<strong>{{ e.name or 'Azienda' }}</strong>{% if e.deleted %}<span class="cell-sub">Eliminata: non c'è più</span>{% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
+              <span class="cell-sub ao-show-sm">{{ e.detail }}</span></td>
+            <td class="ao-hide-sm ao-detail">{{ e.detail or '—' }}</td>
+            <td class="ao-hide-sm small muted">{{ e.actor }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{ pager(page, pages, 'admin_activity') }}
+  {% elif filtered %}
+  <div class="card">{{ empty_state("Nessuna voce trovata", "Prova con un'altra parola o togli i filtri.", reset_url, "Azzera i filtri", 'search') }}</div>
+  {% else %}
+  <div class="card">{{ empty_state("Il registro è ancora vuoto", "Qui compariranno le azioni sulle aziende: creazioni, sospensioni, inviti, accessi ai loro pannelli.", url_for('admin_companies'), "Vai alle aziende", 'shield') }}</div>
+  {% endif %}
+</div>
+{% endblock %}
