@@ -132,3 +132,73 @@ I template Flask si ricaricano solo riavviando il server: riavvialo dopo ogni mo
 ## 9. Come consegnare
 
 Rispondi con un resoconto **breve**: file creati/modificati, cosa hai costruito, i test aggiunti e il loro esito, eventuali deviazioni dal contratto o richieste per l'integrazione (es. un'icona che manca), e cosa NON sei riuscito a fare. Non fare commit né push: li fa il coordinatore.
+
+---
+
+## 9. Amministrazione (proprietario del servizio)
+
+Il **proprietario** è l'account la cui email compare in `OWNER_EMAIL` (variabile d'ambiente, separate da virgola;
+in test: `cfg["OWNER_EMAILS"] = {"owner@x.it"}` dopo `make_config`). Non c'è modo di diventarlo registrandosi.
+Le **aziende** (clienti del servizio) hanno ognuna il proprio account: le crea il proprietario, che riceve un
+**link d'invito monouso** (valido `INVITE_DAYS` = 7 giorni) da girare all'azienda. L'azienda lo apre su
+`/invito/<token>`, sceglie la password ed entra; a quel punto nasce la sua chiave API (si vede una volta sola).
+Stati di un'azienda (`shops.status`): `invited` (non ha ancora accettato) · `active` · `suspended`.
+
+Nel menu il gruppo **Amministrazione** (Panoramica servizio · Aziende · Registro attività) compare solo al
+proprietario. Le pagine usano lo stesso layout (`panel/base.html`, componenti di `_ui.html`, regole §1-§8).
+
+### 9.1 Funzioni in `ctx` (già implementate in app.py: NON modificarle, usarle)
+| Funzione | Cosa fa |
+|---|---|
+| `@ctx.owner_required` | Decoratore di OGNI route di amministrazione. Non proprietario → 404; anonimo → login. |
+| `ctx.create_invited_shop(name, email, notes="")` | Crea l'azienda `invited` → `(id, token)`. Prima controlla tu che l'email non esista. Il token è IN CHIARO e va mostrato **una sola volta**. |
+| `ctx.issue_invite(shop_id)` | Nuovo link (annulla il precedente) → token. Serve a re-invitare un'azienda `invited` o a far **reimpostare la password** a una `active`. |
+| `ctx.invite_url(token)` | URL completo da copiare. |
+| `ctx.set_shop_status(shop_id, "suspended"\|"active")` | Sospende (solo `active`) / riattiva (solo `suspended`). Registra nel registro. Alza `ValueError` se non consentito (es. account del proprietario). |
+| `ctx.delete_shop(shop_id)` | Elimina azienda e TUTTI i suoi dati. Irreversibile. `ValueError` se non consentito. |
+| `ctx.begin_impersonation(shop_id)` | Il proprietario entra nel pannello dell'azienda (solo `active`). Poi tu fai `redirect(url_for("dashboard"))`. Un banner e la voce «Torna all'amministrazione» sono già nel layout. |
+| `ctx.audit(action, target_shop_row=None, detail="")` | Scrive nel registro (`admin_audit`). `detail` ≤ 300 caratteri, **mai** token, password o chiavi API. |
+| `ctx.is_owner(shop_row)` | Booleano. |
+
+Tabella `admin_audit(id, actor_shop_id, actor_email, action, target_shop_id, target_name, detail, created_at)`
+(nessuna FK: resta dopo l'eliminazione dell'azienda). Azioni già scritte dal core: `company.suspend`,
+`company.activate`, `company.delete`, `company.invite_accepted`, `company.password_reset`,
+`impersonation.start`, `impersonation.stop`, `impersonation.action` (ogni POST fatto mentre si guarda un cliente).
+Azioni che scrive la sezione Aziende: `company.create`, `company.invite_reissued`, `company.notes`.
+Colonne utili di `shops`: `status, invite_expires_at, last_login_at, owner_notes, created_at, name, email`.
+
+### 9.2 Chi possiede cosa (file disgiunti, come nel resto del progetto)
+- **Agente «Aziende»**: `sections/admin_companies.py`, `templates/panel/admin_companies.html`,
+  `admin_company_new.html`, `admin_company_detail.html`, `public/static/panel-admin-companies.css` (classi `.ac-`),
+  `test_admin_companies.py`.
+- **Agente «Panoramica servizio»**: `sections/admin_overview.py`, `templates/panel/admin_overview.html`,
+  `admin_activity.html`, `public/static/panel-admin-overview.css` (classi `.ao-`), `test_admin_overview.py`.
+- Il core (`app.py`, `db.py`, `sections/__init__.py`, `panel/base.html`, `_ui.html`, `panel.css`, `panel.js`,
+  `invite.html`) NON si tocca: i difetti si segnalano nel resoconto.
+
+### 9.3 Endpoint e link (contratto)
+| Endpoint | Percorso | Proprietario |
+|---|---|---|
+| `admin_overview` | `GET /admin` | Panoramica servizio |
+| `admin_activity` | `GET /admin/activity?action=&q=&page=` | Panoramica servizio |
+| `admin_companies` | `GET /admin/companies?status=&q=&sort=&page=` | Aziende |
+| `admin_company_new` | `GET/POST /admin/companies/new` | Aziende |
+| `admin_company_detail` | `GET /admin/companies/<int:cid>` | Aziende |
+| azioni sul dettaglio | `POST /admin/companies/<cid>/suspend`, `/activate`, `/invite` (nuovo link/reset password), `/notes`, `/impersonate`, `/delete` | Aziende |
+
+Filtri di `admin_companies`: `status = all | active | invited | suspended | inactive` (*inactive* = attiva ma senza
+scontrini negli ultimi 14 giorni), `sort = recent | name | activity`, `q` cerca in nome ed email.
+La Panoramica servizio collega ogni sua card a questi URL.
+
+### 9.4 Regole di sicurezza (vincolanti)
+1. Ogni route: `@ctx.owner_required`. Le modifiche solo con POST (il CSRF è già globale). Ogni query sulle
+   aziende altrui è ammessa SOLO qui, in sola lettura aggregata; mai mostrare password, hash o chiavi API.
+2. Il link d'invito compare una sola volta, subito dopo creazione/reset (passalo alla pagina successiva con
+   `session["invite_once"] = {"cid":…, "url":…}` e rimuovilo con `session.pop` alla prima visualizzazione). Mai
+   nel database in chiaro, mai nel registro, mai in un log, mai in un URL di redirect.
+3. Eliminazione: serve scrivere il **nome esatto** dell'azienda E la **password del proprietario**
+   (`check_password_hash(g.panel_shop["password_hash"], …)`); altrimenti non si elimina nulla. Mostra prima un
+   riepilogo di cosa verrà perso (n. scontrini, fatture, contatti).
+4. Sospendere/eliminare/impersonare l'account del proprietario o un'azienda inesistente: `ValueError`/404, mai 500.
+5. Niente `style=` né script inline (CSP, §2); testi in italiano; tutto filtrato e paginato lato server.
+6. SQL portabile SQLite/Postgres (§5): conteggi per azienda con sottoselect o `GROUP BY` completo; date in Python.

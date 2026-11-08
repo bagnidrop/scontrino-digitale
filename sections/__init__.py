@@ -7,7 +7,8 @@ REGOLA: i moduli di una sezione non importano `app` e non toccano i file delle a
 """
 from flask import g, request
 
-from . import contacts, integration, invoices, messages, overview, receipts, settings, stats
+from . import (admin_companies, admin_overview, contacts, integration, invoices, messages, overview,
+               receipts, settings, stats)
 
 # Voci del menu laterale: (gruppo, [(chiave, etichetta, icona, endpoint, prefisso percorso)])
 NAV = [
@@ -28,14 +29,23 @@ NAV = [
 ]
 
 
+# Menu del proprietario del servizio: compare solo a lui (vedi DESIGN.md, «Amministrazione»).
+OWNER_NAV = ("Amministrazione", [
+    ("admin_overview", "Panoramica servizio", "chart", "admin_overview", "/admin"),
+    ("admin_companies", "Aziende", "building", "admin_companies", "/admin/companies"),
+    ("admin_activity", "Registro attività", "shield", "admin_activity", "/admin/activity"),
+])
+
+
 def register_all(app, ctx):
-    for module in (overview, receipts, invoices, contacts, messages, stats, integration, settings):
+    for module in (overview, receipts, invoices, contacts, messages, stats, integration, settings,
+                   admin_overview, admin_companies):
         module.register(app, ctx)
 
     @app.context_processor
     def panel_context():
         """Variabili per il layout del pannello (menu, contatori)."""
-        if getattr(g, "panel_shop", None) is None or not request.path.startswith("/dashboard"):
+        if getattr(g, "panel_shop", None) is None or not request.path.startswith(("/dashboard", "/admin")):
             return {}
         path = request.path.rstrip("/") or "/"
         pending = ctx.get_db().execute(
@@ -43,10 +53,11 @@ def register_all(app, ctx):
             " WHERE r.shop_id = ? AND i.status = 'nuova' AND r.voided_at IS NULL",
             (g.panel_shop["id"],)).fetchone()[0]
         groups = []
-        for title, items in NAV:
+        menu = list(NAV) + ([OWNER_NAV] if ctx.is_owner(g.panel_shop) else [])
+        for title, items in menu:
             rows = []
             for key, label, icon, endpoint, prefix in items:
-                current = path == prefix if prefix == "/dashboard" else path.startswith(prefix)
+                current = path == prefix if prefix in ("/dashboard", "/admin") else path.startswith(prefix)
                 rows.append({"key": key, "label": label, "icon": icon, "endpoint": endpoint,
                              "current": current, "badge": pending if key == "invoices" and pending else 0})
             groups.append({"title": title, "items": rows})

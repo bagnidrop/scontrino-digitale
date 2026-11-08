@@ -33,7 +33,12 @@ CREATE TABLE IF NOT EXISTS shops (
     message_template TEXT NOT NULL DEFAULT 'Grazie da {{negozio}}! Ecco il tuo scontrino digitale: {{link}}',
     footer_note TEXT NOT NULL DEFAULT '',
     invoice_window_days INTEGER NOT NULL DEFAULT 3,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    invite_hash TEXT,
+    invite_expires_at TEXT,
+    last_login_at TEXT,
+    owner_notes TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS receipts (
@@ -113,7 +118,30 @@ CREATE INDEX IF NOT EXISTS idx_rate_hits ON rate_hits (key, ts);
 # Vengono applicate ai database esistenti all'avvio, senza perdere dati.
 MIGRATIONS = [
     ("receipts", "voided_at", "TEXT"),  # scontrino annullato
+    # account azienda gestiti dal proprietario del servizio
+    ("shops", "status", "TEXT NOT NULL DEFAULT 'active'"),  # active | invited | suspended
+    ("shops", "invite_hash", "TEXT"),                       # sha256 del link d'invito (mai in chiaro)
+    ("shops", "invite_expires_at", "TEXT"),
+    ("shops", "last_login_at", "TEXT"),
+    ("shops", "owner_notes", "TEXT NOT NULL DEFAULT ''"),
 ]
+
+# Tabelle aggiunte dopo la prima versione: create (se mancano) a ogni avvio.
+LATER_SCHEMA = """
+-- Registro delle azioni del proprietario del servizio. Nessuna chiave esterna: resta dopo
+-- l'eliminazione di un'azienda.
+CREATE TABLE IF NOT EXISTS admin_audit (
+    id {PK},
+    actor_shop_id {FK},
+    actor_email TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    target_shop_id {FK},
+    target_name TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_date ON admin_audit (created_at);
+"""
 
 _TYPES = {
     "sqlite": {"PK": "INTEGER PRIMARY KEY AUTOINCREMENT", "FK": "INTEGER", "REAL": "REAL"},
@@ -250,7 +278,11 @@ def _columns(db, table):
 
 
 def migrate(db):
-    """Aggiunge le colonne mancanti (idempotente)."""
+    """Aggiunge le colonne e le tabelle mancanti (idempotente)."""
+    if db.is_pg:
+        db.execute(LATER_SCHEMA.format(**_TYPES["postgres"]))
+    else:
+        db.conn.executescript(LATER_SCHEMA.format(**_TYPES["sqlite"]))
     for table, column, ddl in MIGRATIONS:
         if column not in _columns(db, table):
             db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")

@@ -225,6 +225,39 @@ def create_shop(name, email, password):
     return shop_id, key
 
 
+INVITE_DAYS = 7
+
+
+def hash_token(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def issue_invite(shop_id):
+    """Genera un nuovo link d'invito (annulla il precedente). Ritorna il token IN CHIARO, da mostrare
+    una sola volta: nel database resta solo l'hash."""
+    token = secrets.token_urlsafe(32)
+    db = get_db()
+    db.execute("UPDATE shops SET invite_hash = ?, invite_expires_at = ? WHERE id = ?",
+               (hash_token(token), (now_utc() + timedelta(days=INVITE_DAYS)).isoformat(timespec="seconds"),
+                shop_id))
+    db.commit()
+    return token
+
+
+def create_invited_shop(name, email, notes=""):
+    """Crea un'azienda in stato 'invited': nessuna password utilizzabile finché non apre il link.
+    Ritorna (id, token_invito). L'email deve essere già stata verificata come libera."""
+    _, key_hash, prefix = new_api_key()  # chiave segnaposto: quella vera nasce quando accetta l'invito
+    db = get_db()
+    shop_id = db.insert(
+        "INSERT INTO shops (name, email, password_hash, api_key_hash, api_key_prefix, created_at,"
+        " status, owner_notes) VALUES (?,?,?,?,?,?,?,?)",
+        (name, email.lower(), generate_password_hash(secrets.token_urlsafe(32)), key_hash, prefix,
+         now_iso(), "invited", notes[:500]))
+    db.commit()
+    return shop_id, issue_invite(shop_id)
+
+
 def _load_secret(instance_dir):
     path = os.path.join(instance_dir, "secret_key")
     if os.path.exists(path):
@@ -268,7 +301,11 @@ def create_app(config=None):
         DATABASE_URL=database_url,
         SECRET_KEY=_secret_key(instance, on_vercel),
         PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "").rstrip("/"),
-        ALLOW_REGISTRATION=os.environ.get("ALLOW_REGISTRATION", "1") == "1",
+        # Chi è il proprietario del servizio (email separate da virgola). Con un proprietario
+        # impostato la registrazione libera si chiude da sola: le aziende entrano su invito.
+        OWNER_EMAILS={e.strip().lower() for e in os.environ.get("OWNER_EMAIL", "").split(",") if e.strip()},
+        ALLOW_REGISTRATION=os.environ.get(
+            "ALLOW_REGISTRATION", "0" if os.environ.get("OWNER_EMAIL", "").strip() else "1") == "1",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "1" if on_vercel else "0") == "1",
@@ -290,14 +327,47 @@ def create_app(config=None):
         return f"{base}/r/{token}"
 
     # ---- sicurezza trasversale
+    def is_owner_account(shop):
+        """L'account è quello del proprietario (a prescindere dallo stato): non si sospende né si elimina."""
+        return bool(shop) and shop["email"].lower() in app.config["OWNER_EMAILS"]
+
+    def is_owner(shop=None):
+        shop = g.get("panel_shop") if shop is None else shop
+        return is_owner_account(shop) and shop["status"] == "active"
+
     @app.before_request
     def load_user():
         g.panel_shop = None
+        g.impersonator = None
         sid = session.get("shop_id")
-        if sid:
-            g.panel_shop = get_db().execute("SELECT * FROM shops WHERE id = ?", (sid,)).fetchone()
-            if g.panel_shop is None:
-                session.pop("shop_id", None)
+        if not sid:
+            return
+        db = get_db()
+        shop = db.execute("SELECT * FROM shops WHERE id = ?", (sid,)).fetchone()
+        # Account sospeso, eliminato o ancora solo invitato: la sessione cade subito.
+        if shop is None or shop["status"] != "active":
+            session.clear()
+            return
+        imp = session.get("impersonator_id")
+        if imp:  # il proprietario sta guardando il pannello di un'azienda
+            owner = db.execute("SELECT * FROM shops WHERE id = ?", (imp,)).fetchone()
+            if owner is None or not is_owner(owner) or is_owner_account(shop):
+                session.clear()
+                return
+            g.impersonator = owner
+        g.panel_shop = shop
+
+    # Durante l'accesso come cliente non si toccano credenziali né si creano dati di prova.
+    IMPERSONATION_BLOCKED = {"settings_password", "regenerate_key", "test_receipt"}
+
+    @app.before_request
+    def impersonation_guard():
+        if g.get("impersonator") is not None and request.method == "POST" \
+                and request.endpoint in IMPERSONATION_BLOCKED:
+            return render_template("error.html", code=403,
+                                   text="Questa azione non è consentita mentre guardi il pannello come "
+                                        "amministratore."), 403
+        return None
 
     @app.before_request
     def csrf_protect():
@@ -311,7 +381,8 @@ def create_app(config=None):
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
         return dict(csrf_token=session["csrf"], me=g.get("panel_shop"),
-                    allow_registration=app.config["ALLOW_REGISTRATION"])
+                    allow_registration=app.config["ALLOW_REGISTRATION"],
+                    impersonating=g.get("impersonator") is not None)
 
     @app.after_request
     def security_headers(resp):
@@ -321,8 +392,16 @@ def create_app(config=None):
         resp.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; style-src 'self'; "
             "script-src 'self'; form-action 'self'; frame-ancestors 'none'")
-        if request.path.startswith(("/r/", "/dashboard", "/api/")):
+        if request.path.startswith(("/r/", "/dashboard", "/api/", "/admin", "/invito/")):
             resp.headers["Cache-Control"] = "no-store" if not request.path.endswith(".svg") else "private, max-age=3600"
+        return resp
+
+    @app.after_request
+    def audit_impersonation(resp):
+        """Ogni modifica fatta dal proprietario dentro il pannello di un cliente finisce nel registro."""
+        if g.get("impersonator") is not None and request.method == "POST" and resp.status_code < 400 \
+                and request.endpoint != "stop_impersonation":
+            audit("impersonation.action", g.panel_shop, f"{request.method} {request.path}")
         return resp
 
     @app.errorhandler(ApiError)
@@ -366,6 +445,8 @@ def create_app(config=None):
                                    (hashlib.sha256(key.encode()).hexdigest(),)).fetchone()
             if row is None:
                 raise ApiError("API key non valida", 401)
+            if row["status"] != "active":
+                raise ApiError("account sospeso: contatta il fornitore del servizio", 403)
             if rate_limited(f"api:{row['id']}", 600, 60):
                 raise ApiError("troppe richieste", 429)
             g.api_shop = row
@@ -609,6 +690,12 @@ def create_app(config=None):
             email = request.form.get("email", "").strip().lower()
             row = get_db().execute("SELECT * FROM shops WHERE email = ?", (email,)).fetchone()
             if row and check_password_hash(row["password_hash"], request.form.get("password", "")):
+                if row["status"] != "active":  # si dice solo dopo aver verificato la password
+                    flash("Questo account è sospeso. Contatta il fornitore del servizio.", "err")
+                    return render_template("login.html"), 403
+                db = get_db()
+                db.execute("UPDATE shops SET last_login_at = ? WHERE id = ?", (now_iso(), row["id"]))
+                db.commit()
                 session.clear()
                 session["shop_id"] = row["id"]
                 session.permanent = True
@@ -621,6 +708,124 @@ def create_app(config=None):
         session.clear()
         return redirect(url_for("index"))
 
+    # ------------------------------------------------------------ proprietario del servizio
+    def audit(action, target=None, detail="", actor=None):
+        """Scrive nel registro delle attività. actor: di norma il proprietario (anche se sta guardando un cliente)."""
+        actor = actor or g.get("impersonator") or g.get("panel_shop")
+        db = get_db()
+        db.execute(
+            "INSERT INTO admin_audit (actor_shop_id, actor_email, action, target_shop_id, target_name,"
+            " detail, created_at) VALUES (?,?,?,?,?,?,?)",
+            (actor["id"] if actor else None, actor["email"] if actor else "", action,
+             target["id"] if target else None, target["name"] if target else "", detail[:300], now_iso()))
+        db.commit()
+
+    def owner_required(view):
+        """Solo il proprietario. Per tutti gli altri la pagina non esiste (404): non si rivela che c'è."""
+        @wraps(view)
+        def wrapped(*a, **kw):
+            if g.panel_shop is None:
+                return redirect(url_for("login"))
+            if g.get("impersonator") is not None or not is_owner(g.panel_shop):
+                abort(404)
+            return view(*a, **kw)
+        return wrapped
+
+    def _managed_shop(shop_id):
+        """Azienda gestibile dal proprietario: esiste e non è il suo stesso account."""
+        shop = get_db().execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
+        if shop is None or is_owner_account(shop):
+            raise ValueError("azienda non gestibile")
+        return shop
+
+    def set_shop_status(shop_id, status):
+        """Sospende (active -> suspended) o riattiva (suspended -> active). Chiamare dentro owner_required."""
+        shop = _managed_shop(shop_id)
+        if status == "suspended" and shop["status"] == "active":
+            action = "company.suspend"
+        elif status == "active" and shop["status"] == "suspended":
+            action = "company.activate"
+        else:
+            raise ValueError("cambio di stato non consentito")
+        db = get_db()
+        db.execute("UPDATE shops SET status = ? WHERE id = ?", (status, shop_id))
+        db.commit()
+        audit(action, shop)
+
+    def delete_shop(shop_id):
+        """Elimina l'azienda e TUTTI i suoi dati (scontrini, fatture, contatti, messaggi). Irreversibile."""
+        shop = _managed_shop(shop_id)
+        audit("company.delete", shop)
+        db = get_db()
+        db.execute("DELETE FROM shops WHERE id = ?", (shop_id,))
+        db.commit()
+
+    def begin_impersonation(shop_id):
+        """Il proprietario entra nel pannello di un'azienda attiva. Registrato nel registro attività."""
+        if not is_owner(g.panel_shop) or g.get("impersonator") is not None:
+            abort(404)
+        try:
+            target = _managed_shop(shop_id)
+        except ValueError:
+            abort(404)
+        if target["status"] != "active":
+            abort(404)
+        audit("impersonation.start", target)
+        session["impersonator_id"] = g.panel_shop["id"]
+        session["shop_id"] = target["id"]
+
+    @app.post("/admin/stop-impersonation")
+    def stop_impersonation():
+        if g.get("impersonator") is None:
+            abort(404)
+        target = g.panel_shop
+        audit("impersonation.stop", target)
+        session["shop_id"] = g.impersonator["id"]
+        session.pop("impersonator_id", None)
+        return redirect(f"/admin/companies/{target['id']}")
+
+    def invite_url(token):
+        base = app.config["PUBLIC_BASE_URL"] or request.host_url.rstrip("/")
+        return f"{base}/invito/{token}"
+
+    @app.route("/invito/<token>", methods=["GET", "POST"])
+    def invite(token):
+        """Pagina pubblica: l'azienda sceglie la propria password con il link ricevuto (monouso, scade)."""
+        if rate_limited(f"invite:{request.remote_addr}", 30, 3600, shared=True):
+            return render_template("error.html", code=429, text="Troppi tentativi. Riprova più tardi."), 429
+        db = get_db()
+        shop = db.execute("SELECT * FROM shops WHERE invite_hash = ?", (hash_token(token),)).fetchone()
+        if shop is None or shop["status"] == "suspended" or not shop["invite_expires_at"] \
+                or parse_iso(shop["invite_expires_at"]) < now_utc():
+            return render_template("error.html", code=404, text="Questo invito non è valido o è scaduto. "
+                                   "Chiedi un nuovo link a chi te l'ha inviato."), 404
+        if request.method == "POST":
+            password, again = request.form.get("password", ""), request.form.get("password2", "")
+            if len(password) < 8:
+                flash("La password deve avere almeno 8 caratteri.", "err")
+            elif password != again:
+                flash("Le due password non coincidono.", "err")
+            else:
+                first_access = shop["status"] == "invited"
+                db.execute("UPDATE shops SET password_hash = ?, status = 'active', invite_hash = NULL,"
+                           " invite_expires_at = NULL, last_login_at = ? WHERE id = ?",
+                           (generate_password_hash(password), now_iso(), shop["id"]))
+                key = None
+                if first_access:  # la chiave API vera nasce ora e si vede una volta sola
+                    key, key_hash, prefix = new_api_key()
+                    db.execute("UPDATE shops SET api_key_hash = ?, api_key_prefix = ? WHERE id = ?",
+                               (key_hash, prefix, shop["id"]))
+                db.commit()
+                audit("company.invite_accepted" if first_access else "company.password_reset",
+                      shop, actor=shop)
+                session.clear()
+                session["shop_id"] = shop["id"]
+                if key:
+                    session["new_api_key"] = key
+                session.permanent = True
+                return redirect(url_for("settings"))
+        return render_template("invite.html", shop=shop, first_access=shop["status"] == "invited")
+
     # ------------------------------------------------------------ pannello (sezioni)
     # Le pagine del pannello vivono in sections/: una cartella di moduli, uno per sezione.
     sections.register_all(app, SimpleNamespace(
@@ -628,7 +833,11 @@ def create_app(config=None):
         fmt_dt=fmt_dt, fmt_qty=fmt_qty, now_iso=now_iso, now_utc=now_utc, parse_iso=parse_iso,
         LOCAL_TZ=LOCAL_TZ, csv_safe=csv_safe, valid_piva=valid_piva, valid_email=valid_email,
         new_api_key=new_api_key, parse_items=parse_items, insert_receipt=insert_receipt,
-        vat_breakdown=vat_breakdown, messaging=messaging))
+        vat_breakdown=vat_breakdown, messaging=messaging,
+        # proprietario del servizio (vedi DESIGN.md, «Amministrazione»)
+        is_owner=is_owner, owner_required=owner_required, audit=audit, invite_url=invite_url,
+        create_invited_shop=create_invited_shop, issue_invite=issue_invite, set_shop_status=set_shop_status,
+        delete_shop=delete_shop, begin_impersonation=begin_impersonation, INVITE_DAYS=INVITE_DAYS))
 
     return app
 

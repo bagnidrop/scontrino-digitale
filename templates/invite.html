@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Benvenuto' if first_access else 'Nuova password' }} · Scontrino Digitale{% endblock %}
+{% block mainclass %}container narrow{% endblock %}
+{% block content %}
+<h1>{% if first_access %}Benvenuto, {{ shop['name'] }}{% else %}Scegli una nuova password{% endif %}</h1>
+<p class="lead">
+  {% if first_access %}Il tuo account è pronto: scegli la password per entrare.{% else %}Imposta la nuova password per <strong>{{ shop['name'] }}</strong>.{% endif %}
+  Accederai con l'email <strong>{{ shop['email'] }}</strong>.
+</p>
+<form method="post" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label>Password (almeno 8 caratteri) <input type="password" name="password" required minlength="8" autocomplete="new-password" autofocus></label>
+  <label>Ripeti la password <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
+  <button class="btn" type="submit">{% if first_access %}Attiva il mio account{% else %}Salva la password{% endif %}</button>
+</form>
+<p class="muted center">Questo link si può usare una sola volta.</p>
+{% endblock %}

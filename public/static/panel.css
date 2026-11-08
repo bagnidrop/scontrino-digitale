@@ -260,3 +260,9 @@ meter.meter, progress.meter { width: 100%; height: 10px; border-radius: 999px; }
 }
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
 @media print { .sidebar, .topbar, .scrim, .page-actions { display: none !important; } .shell { display: block; } .content { padding: 0; max-width: none; } }
+
+/* accesso del proprietario come cliente */
+.imp-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  padding: 10px 20px; background: var(--warn-soft); color: var(--warn); border-bottom: 2px solid var(--warn); font-size: .92rem; }
+.imp-banner span { display: inline-flex; align-items: center; gap: 8px; }
+.imp-banner .icon { flex: none; }
