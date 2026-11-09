@@ -40,8 +40,9 @@
       <form method="post" action="{{ url_for('settings_logo') }}" enctype="multipart/form-data" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         <label class="field">{{ 'Sostituisci con un altro file' if shop_logo else 'Scegli il file' }}
-          <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" required>
+          <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" required data-max-bytes="{{ logo_max_bytes }}">
         </label>
+        <div class="callout warn se-logo-msg" id="se-logo-msg" role="alert" hidden></div>
         <button class="btn btn-primary" type="submit">Carica il logo</button>
       </form>
       {% if shop_logo %}
@@ -178,4 +179,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}{% if tab == 'messaggio' %}<script src="{{ url_for('static', filename='panel-settings.js') }}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if tab in ('messaggio', 'locale') %}<script src="{{ url_for('static', filename='panel-settings.js') }}" defer></script>{% endif %}{% endblock %}

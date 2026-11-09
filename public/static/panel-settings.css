@@ -23,3 +23,5 @@
   min-height: 96px; display: grid; place-items: center; color: var(--muted); }
 .se-logo-plate img { display: block; max-width: 220px; max-height: 104px; width: auto; height: auto; }
 .se-logo-actions { display: grid; gap: 12px; flex: 1 1 260px; min-width: 0; }
+
+.se-logo-msg[hidden] { display: none; }

@@ -425,7 +425,13 @@ def create_app(config=None):
 
     @app.errorhandler(413)
     def too_large(_e):
-        return jsonify(error="richiesta troppo grande"), 413
+        if request.path.startswith("/api/"):
+            return jsonify(error="richiesta troppo grande"), 413
+        if request.path == "/dashboard/settings/logo":  # come ogni altro errore del modulo: messaggio e ritorno
+            flash(f"Il file è troppo pesante: il massimo è {logo.MAX_UPLOAD // (1024 * 1024)} MB. "
+                  "Prova con un'immagine più leggera.", "err")
+            return redirect(url_for("settings", tab="locale"))
+        return render_template("error.html", code=413, text="La richiesta è troppo grande."), 413
 
     def login_required(view):
         @wraps(view)

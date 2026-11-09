@@ -1,4 +1,4 @@
-Flask>=3.0
+Flask>=3.1
 segno>=1.6
 psycopg[binary]>=3.1
 Pillow>=10.0

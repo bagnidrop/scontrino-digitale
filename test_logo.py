@@ -10,6 +10,7 @@ import re
 import pytest
 from PIL import Image
 
+import logo
 from testutil import appmod, make_config, csrf_of, register, seed_receipts
 
 app = appmod.create_app(make_config("logo.db"))
@@ -203,10 +204,29 @@ def test_too_heavy_file_is_rejected():
     assert stored(sid) is None
 
 
-def test_request_larger_than_the_hard_limit_is_refused():
+def test_request_larger_than_the_hard_limit_is_refused_with_a_message_not_raw_json():
     c, key, token, sid = fresh()
-    assert upload(c, os.urandom(4 * 1024 * 1024), follow=False).status_code == 413
+    r = upload(c, os.urandom(4 * 1024 * 1024), follow=False)
+    assert r.status_code == 302 and "/dashboard/settings" in r.headers["Location"]
+    page = c.get(r.headers["Location"]).get_data(as_text=True)   # il messaggio compare alla pagina successiva
+    assert "troppo pesante" in page and 'name="logo"' in page     # e il modulo è ancora lì
+    assert "richiesta troppo grande" not in page
     assert stored(sid) is None
+
+
+def test_api_still_answers_413_as_json():
+    c, key, token, sid = fresh()
+    r = c.post("/api/v1/receipts", data=os.urandom(300 * 1024), headers={"X-API-Key": key},
+               content_type="application/json")
+    assert r.status_code == 413 and r.get_json() == {"error": "richiesta troppo grande"}
+
+
+def test_logo_field_carries_the_size_limit_and_script_for_the_precheck():
+    c, key, token, sid = fresh()
+    h = c.get("/dashboard/settings?tab=locale").get_data(as_text=True)
+    assert f'data-max-bytes="{logo.MAX_UPLOAD}"' in h and 'id="se-logo-msg"' in h
+    assert "panel-settings.js" in h
+    assert 'style="' not in h
 
 
 def test_decompression_bomb_is_rejected_without_decoding():
@@ -221,7 +241,7 @@ def test_decompression_bomb_is_rejected_without_decoding():
 def test_other_endpoints_still_refuse_large_requests():
     c, key, token, sid = fresh()
     r = c.post("/dashboard/settings", data={"csrf": "x", "footer_note": "a" * (300 * 1024)})
-    assert r.status_code == 413
+    assert r.status_code == 413 and "troppo grande" in r.get_data(as_text=True) and not r.is_json
 
 
 # ------------------------------------------------------------------ sostituzione e rimozione

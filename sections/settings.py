@@ -52,6 +52,7 @@ def register(app, ctx):
                                (sid,)).fetchone()
         html = render_template(
             "panel/settings.html", tab=tab, tab_items=tab_items, s=s, v=v, errors=errors or {}, shop_logo=shop_logo,
+            logo_max_bytes=logo.MAX_UPLOAD,
             new_key=session.pop("new_api_key", None), base_url=base_url(), preview=preview,
             sample_link=sample_link, default_template=DEFAULT_TEMPLATE)
         return html, status
