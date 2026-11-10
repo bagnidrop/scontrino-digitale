@@ -153,6 +153,117 @@ CREATE TABLE IF NOT EXISTS shop_logos (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_shop_logos_etag ON shop_logos (etag);
+
+-- ---------------------------------------------------------------- CASSA (POS)
+-- Menu: categorie e prodotti. Il prezzo è IVA inclusa, in centesimi.
+CREATE TABLE IF NOT EXISTS pos_categories (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_pos_categories_shop ON pos_categories (shop_id);
+
+CREATE TABLE IF NOT EXISTS pos_products (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    category_id {FK} REFERENCES pos_categories(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    price_cents INTEGER NOT NULL,
+    vat_rate {REAL} NOT NULL DEFAULT 10,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_pos_products_shop ON pos_products (shop_id, category_id);
+
+-- Sala: tavoli (anche "Banco", "Asporto").
+CREATE TABLE IF NOT EXISTS pos_tables (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    area TEXT NOT NULL DEFAULT '',
+    seats INTEGER NOT NULL DEFAULT 2,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (shop_id, label)
+);
+
+-- Personale con PIN (il titolare entra con l'account dell'azienda).
+CREATE TABLE IF NOT EXISTS pos_staff (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    pin_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'cameriere',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+-- Turni di cassa (apertura/chiusura giornata).
+CREATE TABLE IF NOT EXISTS pos_shifts (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    opened_at TEXT NOT NULL,
+    opened_by TEXT NOT NULL DEFAULT '',
+    opening_cash_cents INTEGER NOT NULL DEFAULT 0,
+    closed_at TEXT,
+    closing_cash_cents INTEGER,
+    note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_pos_shifts_shop ON pos_shifts (shop_id, opened_at);
+
+-- Conto di un tavolo.
+--   status:          open (si ordina) -> preconto (conto mostrato al cliente) -> paid (pagato) ; void (annullato)
+--   customer_status: none | pending (in attesa del cliente) | confirmed | disputed (il cliente segnala un errore)
+--   fiscal_status:   non_fiscale (finché non pagato) -> da_emettere -> emesso (documento commerciale vero)
+CREATE TABLE IF NOT EXISTS pos_orders (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    table_id {FK} REFERENCES pos_tables(id) ON DELETE SET NULL,
+    table_label TEXT NOT NULL DEFAULT '',
+    covers INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'open',
+    opened_by TEXT NOT NULL DEFAULT '',
+    discount_cents INTEGER NOT NULL DEFAULT 0,
+    bill_token TEXT UNIQUE,
+    bill_requested_at TEXT,
+    customer_status TEXT NOT NULL DEFAULT 'none',
+    customer_note TEXT NOT NULL DEFAULT '',
+    customer_at TEXT,
+    confirmed_by TEXT NOT NULL DEFAULT '',
+    receipt_id {FK} REFERENCES receipts(id) ON DELETE SET NULL,
+    fiscal_status TEXT NOT NULL DEFAULT 'non_fiscale',
+    fiscal_number TEXT NOT NULL DEFAULT '',
+    fiscal_at TEXT,
+    shift_id {FK},
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pos_orders_shop ON pos_orders (shop_id, status);
+
+CREATE TABLE IF NOT EXISTS pos_order_items (
+    id {PK},
+    order_id {FK} NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
+    product_id {FK},
+    name TEXT NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 1,
+    unit_price_cents INTEGER NOT NULL,
+    vat_rate {REAL} NOT NULL DEFAULT 10,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pos_order_items_order ON pos_order_items (order_id);
+
+CREATE TABLE IF NOT EXISTS pos_payments (
+    id {PK},
+    order_id {FK} NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
+    method TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    tendered_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pos_payments_order ON pos_payments (order_id);
 """
 
 _TYPES = {

@@ -8,7 +8,7 @@ REGOLA: i moduli di una sezione non importano `app` e non toccano i file delle a
 from flask import g, request
 
 from . import (admin_companies, admin_overview, contacts, integration, invoices, messages, overview,
-               receipts, settings, stats)
+               receipts, settings, stats, pos_fiscal, pos_menu, pos_shifts, pos_terminal)
 
 # Voci del menu laterale: (gruppo, [(chiave, etichetta, icona, endpoint, prefisso percorso)])
 NAV = [
@@ -17,6 +17,12 @@ NAV = [
         ("receipts", "Scontrini", "receipt", "receipts_list", "/dashboard/receipts"),
         ("invoices", "Fatture", "file", "invoices_list", "/dashboard/invoices"),
         ("contacts", "Clienti", "users", "contacts_list", "/dashboard/contacts"),
+    ]),
+    ("Cassa", [
+        ("pos_terminal", "Apri la cassa", "receipt", "pos_terminal", "/cassa"),
+        ("pos_menu", "Menu e sala", "building", "pos_menu", "/dashboard/menu"),
+        ("pos_shifts", "Turni e chiusura", "chart", "pos_shifts", "/dashboard/turni"),
+        ("pos_fiscal", "Da fiscalizzare", "shield", "pos_fiscal", "/dashboard/fiscal"),
     ]),
     ("Analisi", [
         ("messages", "Messaggi", "message", "messages_list", "/dashboard/messages"),
@@ -39,7 +45,7 @@ OWNER_NAV = ("Amministrazione", [
 
 def register_all(app, ctx):
     for module in (overview, receipts, invoices, contacts, messages, stats, integration, settings,
-                   admin_overview, admin_companies):
+                   pos_fiscal, pos_menu, pos_shifts, pos_terminal, admin_overview, admin_companies):
         module.register(app, ctx)
 
     @app.context_processor
