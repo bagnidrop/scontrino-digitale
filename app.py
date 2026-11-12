@@ -374,9 +374,10 @@ def create_app(config=None):
     def csrf_protect():
         if request.method == "POST" and request.path == "/dashboard/settings/logo":
             request.max_content_length = logo.BODY_LIMIT  # il resto dell'app accetta solo richieste piccole
-        if request.method == "POST" and not request.path.startswith("/api/"):
+        if request.method in ("POST", "PATCH", "DELETE") and not request.path.startswith("/api/"):
             expected = session.get("csrf", "")
-            if not expected or not secrets.compare_digest(expected, request.form.get("csrf", "")):
+            sent = request.form.get("csrf", "") or request.headers.get("X-CSRF", "")
+            if not expected or not secrets.compare_digest(expected, sent):
                 abort(400)
 
     @app.context_processor
@@ -599,8 +600,11 @@ def create_app(config=None):
         age = now_utc() - parse_iso(r["created_at"])
         can_invoice = (inv is None and r["voided_at"] is None
                        and age <= timedelta(days=r["invoice_window_days"]))
+        fiscal = db.execute("SELECT fiscal_number FROM pos_orders WHERE receipt_id = ? AND fiscal_status = 'emesso'",
+                            (r["id"],)).fetchone()
         return render_template("receipt.html", r=r, items=items, vat_rows=vat_breakdown(items),
-                               inv=inv, can_invoice=can_invoice, form={}, errors=[])
+                               inv=inv, can_invoice=can_invoice, form={}, errors=[],
+                               fiscal_number=fiscal["fiscal_number"] if fiscal else "")
 
     @app.get("/r/<token>/qr.svg")
     def receipt_qr(token):
@@ -844,7 +848,7 @@ def create_app(config=None):
         fmt_dt=fmt_dt, fmt_qty=fmt_qty, now_iso=now_iso, now_utc=now_utc, parse_iso=parse_iso,
         LOCAL_TZ=LOCAL_TZ, csv_safe=csv_safe, valid_piva=valid_piva, valid_email=valid_email,
         new_api_key=new_api_key, parse_items=parse_items, insert_receipt=insert_receipt,
-        vat_breakdown=vat_breakdown, messaging=messaging,
+        vat_breakdown=vat_breakdown, messaging=messaging, rate_limited=rate_limited,
         # proprietario del servizio (vedi DESIGN.md, «Amministrazione»)
         is_owner=is_owner, owner_required=owner_required, audit=audit, invite_url=invite_url,
         create_invited_shop=create_invited_shop, issue_invite=issue_invite, set_shop_status=set_shop_status,

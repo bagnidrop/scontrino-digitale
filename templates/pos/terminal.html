@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf" content="{{ csrf_token }}">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Cassa · {{ me.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='pos.css') }}">
+</head>
+<body class="pos">
+  <header class="pos-top">
+    <a class="pos-back" href="{{ url_for('dashboard') }}">← Pannello</a>
+    <strong class="pos-shop">{{ me.name }}</strong>
+    <span class="pos-flag">Preconto e conti: NON fiscali</span>
+  </header>
+  <div id="pos-toast" class="pos-toast" role="status" hidden></div>
+  <main id="pos-app" class="pos-main"><p class="pos-loading">Caricamento…</p></main>
+  <noscript><p class="pos-loading">La cassa ha bisogno di JavaScript.</p></noscript>
+  <script src="{{ url_for('static', filename='pos.js') }}" defer></script>
+</body>
+</html>

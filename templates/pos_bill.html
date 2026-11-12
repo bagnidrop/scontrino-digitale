@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Conto · {{ shop.name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="{{ url_for('static', filename='pos-bill.css') }}">{% if o.status == 'preconto' %}<meta name="pos-bill-poll" content="{{ url_for('pos_bill', token=token) }}">{% endif %}{% endblock %}
+{% block nav %}{% endblock %}
+{% block mainclass %}receipt-wrap{% endblock %}
+{% block content %}
+<article class="paper bill">
+  <header class="paper-head">
+    {% if shop.logo_etag %}<div class="paper-logo-box"><img class="paper-logo" src="{{ url_for('logo_image', etag=shop.logo_etag) }}" alt="Logo di {{ shop.name }}" width="{{ shop.logo_w }}" height="{{ shop.logo_h }}"></div>{% endif %}
+    <h1>{{ shop.name }}</h1>
+    {% if shop.address %}<p>{{ shop.address }}</p>{% endif %}
+  </header>
+
+  <p class="bill-banner">PRECONTO<span>Documento NON fiscale</span></p>
+  <p class="meta">{{ o.table_label }}{% if o.covers %} · {{ o.covers }} coperti{% endif %}</p>
+
+  <table class="items"><tbody>
+  {% for it in items %}
+    <tr><td class="qty">{{ it.qty }}×</td><td>{{ it.name }}{% if it.note %}<span class="sub">{{ it.note }}</span>{% endif %}<span class="sub">{{ it.unit_price_cents|euro }} cad.</span></td><td class="num">{{ (it.qty * it.unit_price_cents)|euro }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% if t.discount %}<div class="meta bill-disc"><span>Sconto</span> <strong>− {{ t.discount|euro }}</strong></div>{% endif %}
+  <div class="total"><span>Totale da pagare</span><span>{{ t.total|euro }}</span></div>
+</article>
+
+{% if o.status == 'preconto' and o.customer_status in ('pending', 'disputed') %}
+<section class="card bill-ask">
+  {% if o.customer_status == 'disputed' %}
+    <p class="ok-box">Abbiamo ricevuto la tua segnalazione. Il personale sta correggendo il conto: questa pagina si aggiorna da sola.</p>
+  {% else %}
+    <h2>Controlla il conto</h2>
+    <p class="muted">Verifica che piatti, bevande e quantità siano giusti. Se è tutto corretto, conferma: poi potrai pagare e riceverai lo scontrino.</p>
+    <form method="post" action="{{ url_for('pos_bill_reply', token=token) }}" class="bill-actions">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn" type="submit" name="answer" value="ok">È tutto corretto</button>
+    </form>
+    <details class="bill-error">
+      <summary>C'è un errore</summary>
+      <form method="post" action="{{ url_for('pos_bill_reply', token=token) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="answer" value="error">
+        <label for="note">Cosa non torna?</label>
+        <textarea id="note" name="note" rows="3" maxlength="300" placeholder="Es. la birra è una sola"></textarea>
+        <button class="btn ghost" type="submit">Segnala l'errore</button>
+      </form>
+    </details>
+  {% endif %}
+</section>
+{% elif o.status == 'preconto' %}
+<section class="card"><p class="ok-box">Grazie, hai confermato il conto. Il personale passerà per il pagamento.</p></section>
+{% elif o.status == 'open' %}
+<section class="card"><p class="muted">Il personale sta modificando il conto. Questa pagina si aggiorna da sola.</p></section>
+{% elif o.status == 'paid' %}
+<section class="card"><p class="ok-box">Conto pagato, grazie!</p>
+  {% if receipt_token %}<a class="btn" href="{{ url_for('receipt_view', token=receipt_token) }}">Apri il tuo scontrino digitale</a>{% endif %}</section>
+{% endif %}
+<p class="legal">Il preconto serve solo a verificare il conto e non ha valore fiscale. Il documento commerciale viene emesso dopo il pagamento.</p>
+{% endblock %}

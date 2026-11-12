@@ -162,3 +162,9 @@ Per più di poche decine di locali imposta `DATABASE_URL` su un Postgres (stesso
 - **Verifica fiscale con un commercialista** sul ruolo di copia di cortesia e sulla lotteria degli scontrini.
 - **Connettori** per 1–2 gestionali cloud (Tilby, Scloby, ecc.): oggi l'integrazione avviene via API, quindi serve che il gestionale possa chiamarla.
 - Recupero password, fatturazione/abbonamento dei locali, politica di conservazione dei dati.
+
+## Cassa (POS) per ristoranti
+
+Dal pannello: **Apri la cassa** (`/cassa`, pensata per tablet). Flusso: tavolo → ordine → **preconto** (NON fiscale, con QR) → il cliente lo verifica dal telefono e **conferma** o **segnala un errore** → incasso (contanti con resto, carta, buoni, conto alla romana) → chiusura: scontrino digitale. Menu e tavoli si gestiscono da **Menu e sala**.
+
+**Fiscalità:** questo software non emette documenti fiscali. Ogni conto pagato va in **Da fiscalizzare**: il documento commerciale vero si emette dal registratore telematico o dal portale «Documento commerciale online» dell'Agenzia delle Entrate e se ne registra qui il numero. Verifica la tua situazione con un commercialista. Vedi `POS-DESIGN.md` e `fiscal.py` (punto di aggancio per un futuro software certificato).

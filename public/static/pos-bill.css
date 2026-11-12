@@ -1,0 +1,9 @@
+.bill-banner { text-align: center; font-weight: 800; letter-spacing: .12em; margin: 12px 0 4px; font-size: 1.1rem; }
+.bill-banner span { display: block; font-weight: 600; letter-spacing: 0; font-size: .85rem; color: #b45309; }
+.bill-ask { margin-top: 16px; }
+.bill-actions { margin: 12px 0; }
+.bill-actions .btn { width: 100%; padding: 16px; font-size: 1.1rem; }
+.bill-error summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.bill-error textarea { width: 100%; margin: 6px 0 10px; }
+.bill-disc { display: flex; justify-content: space-between; }
+@media (prefers-color-scheme: dark) { .bill-banner span { color: #fbbf24; } }

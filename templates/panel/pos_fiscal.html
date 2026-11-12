@@ -1,0 +1,41 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, empty_state with context %}
+{% block title %}Da fiscalizzare{% endblock %}
+{% block content %}
+  {{ page_head("Da fiscalizzare", "Conti pagati in cassa per cui va ancora emesso il documento commerciale.") }}
+  <div class="stack">
+    <div class="callout">
+      {{ icon('info', 20) }}
+      <span>Lo scontrino digitale è una <strong>copia di cortesia, non fiscale</strong>. Emetti il documento commerciale dal registratore telematico o dal portale «Documento commerciale online» dell'Agenzia delle Entrate, poi scrivi qui il numero.</span>
+    </div>
+    <div class="card flush">
+      {% if queue %}
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Scontrino</th><th>Tavolo</th><th>Data</th><th>Totale</th><th>Numero del documento emesso</th></tr></thead>
+        <tbody>
+        {% for q in queue %}
+          <tr>
+            <td><a href="{{ url_for('receipt_view', token=q.receipt_token) }}">n. {{ q.receipt_number }}</a></td>
+            <td>{{ q.table_label }}</td><td class="nowrap">{{ q.closed_at|dt }}</td><td class="nowrap">{{ q.receipt_total|euro }}</td>
+            <td><form method="post" action="{{ url_for('pos_fiscal_issue', oid=q.id) }}" class="row-actions">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <label class="sr-only" for="n{{ q.id }}">Numero documento</label>
+              <input class="input" id="n{{ q.id }}" name="number" maxlength="40" placeholder="es. 0012-0345" required>
+              <button class="btn btn-secondary" type="submit">Registra</button></form></td>
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      {% else %}
+        {{ empty_state("Tutto in ordine", "Nessun conto in attesa del documento commerciale.", icon_name="check") }}
+      {% endif %}
+    </div>
+    {% if done %}
+    <h2>Ultimi emessi</h2>
+    <div class="card flush"><div class="table-wrap"><table class="table">
+      <thead><tr><th>Scontrino</th><th>Tavolo</th><th>Documento n.</th><th>Registrato il</th><th>Totale</th></tr></thead>
+      <tbody>{% for d in done %}<tr><td><a href="{{ url_for('receipt_view', token=d.receipt_token) }}">n. {{ d.receipt_number }}</a></td>
+        <td>{{ d.table_label }}</td><td>{{ d.fiscal_number }}</td><td class="nowrap">{{ d.fiscal_at|dt }}</td><td>{{ d.receipt_total|euro }}</td></tr>{% endfor %}</tbody>
+    </table></div></div>
+    {% endif %}
+  </div>
+{% endblock %}
