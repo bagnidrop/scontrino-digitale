@@ -212,6 +212,8 @@ CREATE TABLE IF NOT EXISTS pos_shifts (
     note TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_pos_shifts_shop ON pos_shifts (shop_id, opened_at);
+-- un solo turno aperto per azienda (garantito dal database)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pos_shifts_one_open ON pos_shifts (shop_id) WHERE closed_at IS NULL;
 
 -- Conto di un tavolo.
 --   status:          open (si ordina) -> preconto (conto mostrato al cliente) -> paid (pagato) ; void (annullato)

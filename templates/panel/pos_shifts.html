@@ -1,0 +1,57 @@
+{% extends "panel/base.html" %}
+{% from "panel/_ui.html" import icon, page_head, empty_state with context %}
+{% macro sumcard(s, shift) %}
+  <div class="grid cols-4">
+    <div class="card"><span class="muted">Incassato</span><div class="stat-value">{{ s.total|euro }}</div></div>
+    <div class="card"><span class="muted">Conti chiusi</span><div class="stat-value">{{ s.orders }}</div></div>
+    <div class="card"><span class="muted">Coperti</span><div class="stat-value">{{ s.covers }}</div></div>
+    <div class="card"><span class="muted">Sconti</span><div class="stat-value">{{ s.discounts|euro }}</div></div>
+  </div>
+  <div class="card flush"><div class="table-wrap"><table class="table">
+    <thead><tr><th>Metodo</th><th>Incassi</th></tr></thead><tbody>
+    {% for m in s.methods %}<tr><td>{{ m.method|capitalize }}</td><td>{{ m.total|euro }}</td></tr>{% else %}<tr><td colspan="2" class="muted">Nessun incasso in questo turno.</td></tr>{% endfor %}
+    <tr><td>Fondo cassa iniziale</td><td>{{ shift.opening_cash_cents|euro }}</td></tr>
+    <tr><td><strong>Contanti attesi in cassa</strong></td><td><strong>{{ s.expected_cash|euro }}</strong></td></tr>
+    {% if shift.closed_at %}<tr><td>Contanti contati</td><td>{{ shift.closing_cash_cents|euro }}</td></tr>
+    {% set diff = shift.closing_cash_cents - s.expected_cash %}
+    <tr><td><strong>Differenza</strong></td><td><strong>{{ ('+' if diff > 0 else '') ~ (diff|euro) }}</strong> {% if diff == 0 %}— cassa in pari{% elif diff < 0 %}— mancano soldi{% else %}— c'è un'eccedenza{% endif %}</td></tr>{% endif %}
+    </tbody></table></div></div>
+{% endmacro %}
+{% block title %}Turni e chiusura{% endblock %}
+{% block content %}
+  {{ page_head("Turni e chiusura", "Apri la giornata con il fondo cassa, chiudila contando i contanti: il riepilogo è automatico.") }}
+  <div class="stack">
+    {% if detail %}
+      <h2>Turno del {{ detail.opened_at|dt }}{% if detail.closed_at %} — chiuso {{ detail.closed_at|dt }}{% endif %}</h2>
+      {{ sumcard(det_sum, detail) }}
+      {% if detail.note %}<div class="callout"><span>Nota: {{ detail.note }}</span></div>{% endif %}
+      <a class="btn btn-secondary" href="{{ url_for('pos_shifts') }}">← Torna ai turni</a>
+    {% elif current %}
+      <div class="callout">{{ icon('info', 20) }}<span>Turno aperto dal {{ current.opened_at|dt }} · fondo cassa {{ current.opening_cash_cents|euro }}</span></div>
+      {{ sumcard(cur_sum, current) }}
+      {% if blockers %}
+      <div class="card"><h2>Conti ancora aperti</h2><p class="muted">Vanno chiusi o annullati prima della chiusura del turno.</p>
+        {% for b in blockers %}<a class="btn btn-secondary" href="{{ url_for('pos_terminal') }}">{{ b.table_label }} ({{ 'preconto' if b.status == 'preconto' else 'in corso' }})</a> {% endfor %}</div>
+      {% endif %}
+      <div class="card"><h2>Chiudi il turno</h2>
+        <form method="post" action="{{ url_for('pos_shift_close') }}" class="row"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <label class="sr-only" for="cc">Contanti contati</label><input class="input" id="cc" name="closing_cash" inputmode="decimal" placeholder="Contanti contati in cassa (€)" required>
+          <label class="sr-only" for="cn">Nota</label><input class="input" id="cn" name="note" maxlength="300" placeholder="Nota (facoltativa)">
+          <button class="btn btn-primary" type="submit" {{ 'disabled' if blockers }}>Chiudi turno</button></form></div>
+    {% else %}
+      <div class="card"><h2>Apri il turno</h2><p class="muted">Scrivi i contanti che metti in cassa per cominciare (il fondo cassa).</p>
+        <form method="post" action="{{ url_for('pos_shift_open') }}" class="row"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <label class="sr-only" for="oc">Fondo cassa</label><input class="input" id="oc" name="opening_cash" inputmode="decimal" value="0,00" required>
+          <button class="btn btn-primary" type="submit">Apri il turno</button></form></div>
+    {% endif %}
+    {% if not detail %}
+    <h2>Turni chiusi</h2>
+    <div class="card flush">{% if history %}<div class="table-wrap"><table class="table">
+      <thead><tr><th>Aperto</th><th>Chiuso</th><th>Incassato</th><th>Differenza cassa</th><th></th></tr></thead><tbody>
+      {% for h, s in history %}{% set diff = h.closing_cash_cents - s.expected_cash %}
+        <tr><td class="nowrap">{{ h.opened_at|dt }}</td><td class="nowrap">{{ h.closed_at|dt }}</td><td>{{ s.total|euro }}</td><td>{{ diff|euro }}</td>
+          <td><a class="btn btn-ghost btn-sm" href="{{ url_for('pos_shifts', id=h.id) }}">Dettaglio</a></td></tr>{% endfor %}
+    </tbody></table></div>{% else %}{{ empty_state("Nessun turno chiuso", "Quando chiudi un turno lo trovi qui.", icon_name="clock") }}{% endif %}</div>
+    {% endif %}
+  </div>
+{% endblock %}
