@@ -144,7 +144,10 @@
         kids.push(h("img", { class: "qr", src: o.receipt.qr, alt: "QR dello scontrino digitale" }));
         kids.push(h("a", { class: "link", href: o.receipt.url, target: "_blank", rel: "noopener" }, "Scontrino digitale n. " + o.receipt.number + " — " + o.receipt.url));
       }
-      kids.push(h("div", { class: "banner fisc" }, "Scontrino digitale = copia di cortesia, NON fiscale. Resta da emettere il documento commerciale (registratore telematico o portale Agenzia delle Entrate): lo registri in «Da fiscalizzare»."));
+      if (o.fiscal_status === "emesso") kids.push(h("div", { class: "banner ok" }, "Documento commerciale emesso n. " + o.fiscal_number + "."));
+      else if (o.rt === "queued" || o.rt === "printing") kids.push(h("div", { class: "banner wait" }, "Documento fiscale in stampa sul registratore…"));
+      else if (o.rt === "failed" || o.rt === "uncertain") kids.push(h("div", { class: "banner err" }, "Il registratore non ha confermato il documento: controlla in «Da fiscalizzare». " + (o.rt_error || "")));
+      else kids.push(h("div", { class: "banner fisc" }, "Scontrino digitale = copia di cortesia, NON fiscale. Resta da emettere il documento commerciale (registratore telematico o portale Agenzia delle Entrate): lo registri in «Da fiscalizzare»."));
     } else if (o.status === "void") {
       kids.push(h("div", { class: "banner" }, "Conto annullato."));
     }

@@ -267,6 +267,38 @@ CREATE TABLE IF NOT EXISTS pos_payments (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pos_payments_order ON pos_payments (order_id);
+
+-- ------------------------------------------- Registratore telematico (RT) tramite «ponte» nel locale
+-- Il ponte (rt_bridge.py) gira su un PC del locale, chiama il server e parla con l'RT in rete locale.
+CREATE TABLE IF NOT EXISTS rt_settings (
+    shop_id {FK} PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    token_hash TEXT,
+    token_prefix TEXT NOT NULL DEFAULT '',
+    last_seen TEXT,
+    dept_map TEXT NOT NULL DEFAULT '{{"22": 1, "10": 2, "5": 3, "4": 4, "0": 5}}',
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rt_settings_token ON rt_settings (token_hash);
+
+-- Coda dei documenti da far emettere all'RT.
+--   queued -> printing (preso dal ponte) -> done | failed (l'RT ha rifiutato: si può riprovare)
+--   | uncertain (non sappiamo se l'RT l'ha emesso: va controllato a mano, MAI rimandato in automatico)
+CREATE TABLE IF NOT EXISTS rt_jobs (
+    id {PK},
+    shop_id {FK} NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    order_id {FK} NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'queued',
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    number TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rt_jobs_shop ON rt_jobs (shop_id, status);
+-- un solo documento attivo (o emesso) per conto: impedisce doppie emissioni fiscali
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rt_jobs_one_per_order ON rt_jobs (order_id) WHERE status <> 'failed';
 """
 
 _TYPES = {

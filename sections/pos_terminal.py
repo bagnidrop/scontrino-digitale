@@ -5,6 +5,7 @@ Endpoint: pos_terminal, pos_api_* . Non importa `app`.
 from flask import g, jsonify, redirect, render_template, request, session, url_for
 
 import pos_service as pos
+import rt
 
 
 def register(app, ctx):
@@ -75,6 +76,8 @@ def register(app, ctx):
                     "qr": url_for("pos_bill_qr", token=o["bill_token"])}
         return {
             "id": o["id"], "table_id": o["table_id"], "table": o["table_label"], "covers": o["covers"],
+            "fiscal_number": o["fiscal_number"], "rt": rt.job_status_for_order(db, oid)[0],
+            "rt_error": rt.job_status_for_order(db, oid)[1],
             "status": o["status"], "customer_status": o["customer_status"], "customer_note": o["customer_note"],
             "confirmed_by": o["confirmed_by"], "fiscal_status": o["fiscal_status"], "totals": t, "bill": bill,
             "receipt": receipt, "discount_cents": o["discount_cents"],
@@ -188,6 +191,7 @@ def register(app, ctx):
             return jsonify(out)
         elif action == "close":
             pos.close_order(db, sid(), oid, ctx.insert_receipt)
+            rt.enqueue_if_enabled(db, sid(), oid)  # se il collegamento all'RT è attivo, parte l'emissione
         else:
             return jsonify(error="Azione sconosciuta."), 404
         return jsonify(order_json(oid))

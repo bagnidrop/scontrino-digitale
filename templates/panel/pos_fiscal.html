@@ -11,12 +11,15 @@
     <div class="card flush">
       {% if queue %}
       <div class="table-wrap"><table class="table">
-        <thead><tr><th>Scontrino</th><th>Tavolo</th><th>Data</th><th>Totale</th><th>Numero del documento emesso</th></tr></thead>
+        <thead><tr><th>Scontrino</th><th>Tavolo</th><th>Data</th><th>Totale</th>{% if rt_enabled %}<th>Registratore</th>{% endif %}<th>Numero del documento emesso</th></tr></thead>
         <tbody>
         {% for q in queue %}
           <tr>
             <td><a href="{{ url_for('receipt_view', token=q.receipt_token) }}">n. {{ q.receipt_number }}</a></td>
             <td>{{ q.table_label }}</td><td class="nowrap">{{ q.closed_at|dt }}</td><td class="nowrap">{{ q.receipt_total|euro }}</td>
+            {% if rt_enabled %}{% set j = rt_latest.get(q.id) %}<td>{% if j and j.status != 'failed' %}<span class="badge">{{ rt_labels[j.status] }}</span>{% elif j %}<span class="badge">{{ rt_labels['failed'] }}</span>
+              <form method="post" action="{{ url_for('pos_rt_send', order_id=q.id) }}" class="row-actions"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-ghost btn-sm" type="submit">Invia di nuovo</button></form>
+              {% else %}<form method="post" action="{{ url_for('pos_rt_send', order_id=q.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-secondary btn-sm" type="submit">Invia al registratore</button></form>{% endif %}</td>{% endif %}
             <td><form method="post" action="{{ url_for('pos_fiscal_issue', oid=q.id) }}" class="row-actions">
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <label class="sr-only" for="n{{ q.id }}">Numero documento</label>
@@ -27,6 +30,53 @@
         </tbody></table></div>
       {% else %}
         {{ empty_state("Tutto in ordine", "Nessun conto in attesa del documento commerciale.", icon_name="check") }}
+      {% endif %}
+    </div>
+
+    <div class="card" id="registratore">
+      <h2>Registratore telematico (RT)</h2>
+      {% if rt_token %}
+      <div class="callout"><span><strong>Token del ponte (si vede una sola volta):</strong> <code>{{ rt_token }}</code></span></div>
+      {% endif %}
+      {% if not rt_enabled %}
+        <p class="muted">Collega il registratore telematico del locale: quando chiudi un conto in cassa, il documento commerciale viene emesso dall'RT in automatico e il suo numero finisce qui. Serve un piccolo programma («ponte») su un computer sempre acceso nella rete del locale, collegato all'RT. Driver disponibile: <strong>Epson</strong> (FP-81 II RT, FP-90 III). Fatti aiutare dal tecnico che ha installato l'RT.</p>
+        <form method="post" action="{{ url_for('pos_rt_enable') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-primary" type="submit">Attiva il collegamento</button></form>
+      {% else %}
+        <p>
+          {% if rt_settings.last_seen %}Ponte visto l'ultima volta: <strong>{{ rt_settings.last_seen|dt }}</strong>.{% else %}Il ponte non si è ancora collegato.{% endif %}
+          Token <code>{{ rt_settings.token_prefix }}…</code>
+        </p>
+        <h3>Come si installa</h3>
+        <ol class="muted">
+          <li>Scarica <a href="{{ url_for('static', filename='rt_bridge.py') }}" download>rt_bridge.py</a> sul computer del locale (serve Python 3, nient'altro).</li>
+          <li>Prova senza stampare nulla: <code>python rt_bridge.py --server {{ request.url_root.rstrip('/') }} --token IL_TOKEN --dry-run</code></li>
+          <li>Per l'uso vero aggiungi l'indirizzo dell'RT: <code>--rt http://192.168.1.50/cgi-bin/fpmate.cgi</code> e lascialo sempre acceso.</li>
+        </ol>
+        <h3>Reparti dell'RT</h3>
+        <p class="muted">Ogni aliquota IVA va al reparto programmato nel registratore. <strong>Devono coincidere con la programmazione dell'RT</strong>: chiedi al tecnico.</p>
+        <form method="post" action="{{ url_for('pos_rt_depts') }}" class="row">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          {% for rate in ['22', '10', '5', '4', '0'] %}<label class="sr-only" for="d{{ rate }}">Reparto IVA {{ rate }}%</label><input class="input" id="d{{ rate }}" name="dept_{{ rate }}" type="number" min="1" max="99" value="{{ rt_depts[rate] }}" title="Reparto per IVA {{ rate }}%" placeholder="IVA {{ rate }}%">{% endfor %}
+          <button class="btn btn-secondary" type="submit">Salva reparti</button>
+        </form>
+        <p class="muted">Ordine: IVA 22% · 10% · 5% · 4% · 0%.</p>
+        {% if rt_jobs %}
+        <h3>Ultimi documenti</h3>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Tavolo</th><th>Stato</th><th>Numero</th><th>Note</th></tr></thead><tbody>
+        {% for j in rt_jobs %}<tr><td>{{ j.table_label }}</td><td>{{ rt_labels[j.status] }}</td><td>{{ j.number }}</td>
+          <td>{{ j.error }}
+            {% if j.status in ('uncertain', 'failed') and rt_latest.get(j.order_id) and rt_latest[j.order_id].id == j.id %}
+            <form method="post" action="{{ url_for('pos_rt_retry', job_id=j.id) }}" class="row-actions"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+              {% if j.status == 'uncertain' %}<label><input type="checkbox" name="checked" value="1" required> Ho controllato sul registratore: NON è uscito</label>{% else %}<input type="hidden" name="checked" value="1">{% endif %}
+              <button class="btn btn-ghost btn-sm" type="submit">Rimanda</button></form>
+            {% if j.status == 'uncertain' %}<p class="muted">Se invece è uscito, scrivi il suo numero nella lista qui sopra.</p>{% endif %}{% endif %}
+          </td></tr>{% endfor %}
+        </tbody></table></div>
+        {% endif %}
+        <div class="row">
+          <form method="post" action="{{ url_for('pos_rt_enable') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-secondary" type="submit">Rigenera il token</button></form>
+          <form method="post" action="{{ url_for('pos_rt_disable') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-ghost" type="submit">Disattiva</button></form>
+        </div>
       {% endif %}
     </div>
     {% if done %}
