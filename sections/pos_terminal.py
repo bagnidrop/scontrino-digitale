@@ -76,6 +76,7 @@ def register(app, ctx):
                     "qr": url_for("pos_bill_qr", token=o["bill_token"])}
         return {
             "id": o["id"], "table_id": o["table_id"], "table": o["table_label"], "covers": o["covers"],
+            "delivery": o["delivery_pref"], "delivery_by": o["delivery_by"],
             "fiscal_number": o["fiscal_number"], "rt": rt.job_status_for_order(db, oid)[0],
             "rt_error": rt.job_status_for_order(db, oid)[1],
             "status": o["status"], "customer_status": o["customer_status"], "customer_note": o["customer_note"],
@@ -175,6 +176,8 @@ def register(app, ctx):
             pos.reopen_order(db, sid(), oid)
         elif action == "confirm":
             pos.staff_confirm(db, sid(), oid, (staff() or {}).get("name") or g.panel_shop["name"])
+        elif action == "delivery":
+            pos.set_delivery(db, sid(), oid, b.get("pref"), (staff() or {}).get("name") or g.panel_shop["name"])
         elif action == "comanda":
             batch = pos.send_to_kitchen(db, sid(), oid)
             out = order_json(oid)

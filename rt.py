@@ -132,7 +132,7 @@ def build_payload(db, shop_id, order):
     if not lines or total <= 0 or total != sum(p["amount_cents"] for p in payments):
         raise RtError("Righe e incassi non coincidono: documento non inviabile.")
     return {"order_id": order["id"], "table": order["table_label"], "lines": lines, "payments": payments,
-            "total_cents": total}
+            "total_cents": total, "delivery": order["delivery_pref"] or ""}
 
 
 def enqueue(db, shop_id, order_id):

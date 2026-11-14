@@ -204,3 +204,30 @@ def test_pin_rate_limit_and_isolation(shop):
     other, _ = register(app, "Altra pin", f"pin{next(_n)}@example.com")
     h2 = {"X-CSRF": csrf(other)}
     assert call(other, h2, "POST", "/unlock", {"staff_id": sid_, "pin": "4444"})[0] == 403
+
+
+def test_delivery_preference_customer_and_staff(shop):
+    client, h = shop
+    t, prods = first(client, h)
+    _, o = call(client, h, "POST", "/orders", {"table_id": t})
+    oid = o["id"]
+    call(client, h, "POST", f"/orders/{oid}/items", {"product_id": prods[0]["id"], "qty": 1})
+    assert call(client, h, "POST", f"/orders/{oid}/delivery", {"pref": "digital"})[0] == 409  # prima il preconto
+    _, o = call(client, h, "POST", f"/orders/{oid}/bill")
+    token = o["bill"]["url"].rsplit("/", 1)[1]
+    anon = app.test_client()
+    page = anon.get(f"/p/{token}").get_data(as_text=True)
+    assert "Come vuoi il documento fiscale" not in page  # compare solo dopo la conferma del conto
+    ctok = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+    anon.post(f"/p/{token}/reply", data={"csrf": ctok, "answer": "ok"})
+    page = anon.get(f"/p/{token}").get_data(as_text=True)
+    assert "Come vuoi il documento fiscale" in page and "Solo digitale, niente carta" in page
+    assert "Hai scelto" not in page  # nessuna scelta preselezionata
+    anon.post(f"/p/{token}/reply", data={"csrf": ctok, "delivery": "digital"})
+    _, o = call(client, h, "GET", f"/orders/{oid}")
+    assert o["delivery"] == "digital" and o["delivery_by"] == "cliente"
+    anon.post(f"/p/{token}/reply", data={"csrf": ctok, "delivery": "boh"})
+    assert call(client, h, "GET", f"/orders/{oid}")[1]["delivery"] == "digital"  # valore non valido ignorato
+    code, o = call(client, h, "POST", f"/orders/{oid}/delivery", {"pref": "paper"})  # il cliente cambia idea a voce
+    assert code == 200 and o["delivery"] == "paper" and o["delivery_by"] != "cliente"
+    assert call(client, h, "POST", f"/orders/{oid}/delivery", {"pref": "x"})[0] == 400

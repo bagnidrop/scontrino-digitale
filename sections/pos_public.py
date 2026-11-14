@@ -42,8 +42,11 @@ def register(app, ctx):
             abort(404)
         if ctx.rate_limited(f"bill:{request.remote_addr}", 30, 3600, shared=True):
             abort(400)
-        ok = request.form.get("answer") == "ok"
         try:
+            if request.form.get("delivery") in ("digital", "paper"):
+                pos.customer_set_delivery(get_db(), token, request.form["delivery"])
+                return redirect(url_for("pos_bill", token=token))
+            ok = request.form.get("answer") == "ok"
             pos.customer_reply(get_db(), token, ok, request.form.get("note", ""))
         except pos.PosError as e:
             flash(e.message, "err")

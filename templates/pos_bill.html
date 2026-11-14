@@ -54,5 +54,19 @@
 <section class="card"><p class="ok-box">Conto pagato, grazie!</p>
   {% if receipt_token %}<a class="btn" href="{{ url_for('receipt_view', token=receipt_token) }}">Apri il tuo scontrino digitale</a>{% endif %}</section>
 {% endif %}
+{% if o.status in ('preconto', 'paid') and o.customer_status == 'confirmed' %}
+<section class="card bill-ask">
+  <h2>Come vuoi il documento fiscale?</h2>
+  {% if o.delivery_pref == 'digital' %}<p class="ok-box">Hai scelto: <strong>solo formato elettronico</strong>, senza carta. Puoi cambiare idea finché non hai pagato.</p>
+  {% elif o.delivery_pref == 'paper' %}<p class="ok-box">Hai scelto: <strong>copia cartacea</strong>. Il personale te la darà.</p>{% else %}
+  <p class="muted">Puoi riceverlo solo in forma elettronica (via link, senza bisogno di dare la tua email) oppure su carta. Decidi tu.</p>{% endif %}
+  {% if o.status == 'preconto' %}
+  <form method="post" action="{{ url_for('pos_bill_reply', token=token) }}" class="bill-actions">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="btn {{ '' if o.delivery_pref == 'digital' else 'ghost' }}" type="submit" name="delivery" value="digital">Solo digitale, niente carta</button>
+    <button class="btn {{ '' if o.delivery_pref == 'paper' else 'ghost' }}" type="submit" name="delivery" value="paper">Voglio la carta</button>
+  </form>{% endif %}
+</section>
+{% endif %}
 <p class="legal">Il preconto serve solo a verificare il conto e non ha valore fiscale. Il documento commerciale viene emesso dopo il pagamento.</p>
 {% endblock %}

@@ -119,6 +119,18 @@
       }))
     ]);
   }
+  function deliveryRow(o) {
+    var who = o.delivery_by === "cliente" ? "scelto dal cliente" : (o.delivery_by ? "registrato da " + o.delivery_by : "");
+    function pick(pref, label) {
+      return h("button", { class: o.delivery === pref ? "primary" : "", onclick: function () { act("POST", "/orders/" + o.id + "/delivery", { pref: pref }); } }, label);
+    }
+    return h("div", {}, [
+      h("p", { class: "pos-sub" }, o.delivery === "digital" ? "Documento fiscale: SOLO DIGITALE, nessuna carta (" + who + ")."
+        : o.delivery === "paper" ? "Documento fiscale: il cliente vuole la CARTA (" + who + ")."
+        : "Il cliente non ha ancora scelto come vuole il documento fiscale. Se dice a voce che va bene solo digitale, registralo qui:"),
+      h("div", { class: "row" }, [pick("digital", "Solo digitale"), pick("paper", "Vuole la carta")])
+    ]);
+  }
   function viewStatus(o) {
     var kids = [];
     if (o.status === "preconto") {
@@ -126,6 +138,7 @@
         kids.push(h("div", { class: "banner err" }, ["Il cliente segnala un errore: ", h("em", {}, o.customer_note || "(nessuna nota)")]));
         kids.push(h("button", { class: "primary", onclick: function () { act("POST", "/orders/" + o.id + "/reopen", {}); } }, "Riapri il conto per correggerlo"));
       } else if (o.customer_status === "confirmed") {
+        kids.push(deliveryRow(o));
         kids.push(h("div", { class: "banner ok" }, o.confirmed_by === "cliente" ? "Il cliente ha verificato e confermato il conto. Puoi incassare." : "Conto confermato a voce da " + o.confirmed_by + ". Puoi incassare."));
       } else {
         kids.push(h("div", { class: "banner wait" }, "PRECONTO (non fiscale): in attesa che il cliente lo verifichi"));
@@ -140,6 +153,8 @@
       }
     } else if (o.status === "paid") {
       kids.push(h("div", { class: "banner ok" }, "Conto chiuso e pagato."));
+      if (o.delivery === "paper") kids.push(h("div", { class: "banner err" }, "Il cliente vuole la copia CARTACEA: stampala dal registratore."));
+      else if (o.delivery === "digital") kids.push(h("div", { class: "banner ok" }, "Il cliente ha scelto il documento solo digitale: niente carta."));
       if (o.receipt) {
         kids.push(h("img", { class: "qr", src: o.receipt.qr, alt: "QR dello scontrino digitale" }));
         kids.push(h("a", { class: "link", href: o.receipt.url, target: "_blank", rel: "noopener" }, "Scontrino digitale n. " + o.receipt.number + " — " + o.receipt.url));

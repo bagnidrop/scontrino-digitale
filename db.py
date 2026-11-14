@@ -124,7 +124,10 @@ MIGRATIONS = [
     ("shops", "invite_expires_at", "TEXT"),
     ("shops", "last_login_at", "TEXT"),
     ("shops", "owner_notes", "TEXT NOT NULL DEFAULT ''"),
-    ("pos_order_items", "sent_at", "TEXT"),  # inviata in cucina (comanda)
+    ("pos_order_items", "sent_at", "TEXT"),
+    ("pos_orders", "delivery_pref", "TEXT NOT NULL DEFAULT ''"),  # digital | paper (scelta del cliente)
+    ("pos_orders", "delivery_by", "TEXT NOT NULL DEFAULT ''"),  # cliente | nome di chi l'ha registrata
+    ("pos_orders", "delivery_at", "TEXT"),  # inviata in cucina (comanda)
 ]
 
 # Tabelle aggiunte dopo la prima versione: create (se mancano) a ogni avvio.

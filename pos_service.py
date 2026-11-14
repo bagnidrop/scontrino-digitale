@@ -419,6 +419,30 @@ def staff_confirm(db, shop_id, order_id, who="staff"):
     db.commit()
 
 
+def set_delivery(db, shop_id, order_id, pref, by="staff"):
+    """Come il cliente vuole il documento: «digital» = accordo a riceverlo solo in forma elettronica
+    (DM 7/12/2016 art. 1 c. 4: «previo accordo con il destinatario»), «paper» = vuole la carta."""
+    o = get_order(db, shop_id, order_id)
+    if o["status"] not in ("preconto", "paid"):
+        raise PosError("Presenta prima il preconto.", 409)
+    _set_delivery(db, o["id"], pref, by)
+
+
+def customer_set_delivery(db, token, pref):
+    o = order_by_bill_token(db, token)
+    if not o or o["status"] not in ("preconto", "paid"):
+        raise PosError("Preconto non trovato.", 404)
+    _set_delivery(db, o["id"], pref, "cliente")
+
+
+def _set_delivery(db, order_id, pref, by):
+    if pref not in ("digital", "paper"):
+        raise PosError("Scelta non valida.")
+    db.execute("UPDATE pos_orders SET delivery_pref = ?, delivery_by = ?, delivery_at = ? WHERE id = ?",
+               (pref, str(by)[:40], now_iso(), order_id))
+    db.commit()
+
+
 # ------------------------------------------------------------------ pagamento e chiusura
 def add_payment(db, shop_id, order_id, method, amount_cents, tendered_cents=None):
     """Registra un incasso (anche parziale: conto alla romana). Restituisce il resto da dare."""

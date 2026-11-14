@@ -159,6 +159,9 @@ def process_once(args):
         return False
     job = data["job"]
     xml = epson_xml(job["payload"], args.operator)
+    if job["payload"].get("delivery") == "digital":
+        log("il cliente ha scelto il documento SOLO elettronico: l'RT potrebbe stampare comunque, "
+            "se non è impostato per non stampare (verifica con l'installatore)")
     if args.dry_run:
         log(f"[prova] documento {job['id']}: nessun invio all'RT.\n{xml}")
         outcome, info = "not_sent", "Prova (--dry-run): nulla inviato"
