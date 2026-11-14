@@ -52,3 +52,12 @@ h2 { margin:0 0 10px; font-size:1.1rem; }
 .pos-top { flex-wrap: wrap; }
 @media (max-width: 520px) { .pos-flag { display: none; } .pos-main { padding: 10px; } .prods, .floor { grid-template-columns: repeat(2, 1fr); } }
 .row.head > * { flex: 0 0 auto; } .row.head h2 { margin: 0; align-self: center; }
+
+.pos-who { display:flex; align-items:center; gap:8px; } .pos-who button, .pos-exit button { min-height:40px; }
+.pos-exit { margin:0; }
+.kitchen { background:#b45309; color:#fff; border-color:#b45309; font-weight:700; }
+.comanda-link { display:block; text-decoration:none; color:inherit; }
+.lock { max-width:420px; margin:30px auto; text-align:center; }
+.pin-dots { font-size:2rem; letter-spacing:.3em; min-height:48px; margin:6px 0 12px; }
+.pinpad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; } .pinpad button { min-height:64px; font-size:1.4rem; }
+.lock .floor { grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); }

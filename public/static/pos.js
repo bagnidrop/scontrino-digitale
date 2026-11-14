@@ -4,7 +4,7 @@
   var CSRF = document.querySelector('meta[name="csrf"]').content;
   var app = document.getElementById("pos-app");
   var toastEl = document.getElementById("pos-toast");
-  var S = { view: "floor", tables: [], order: null, menu: null, cat: null, typing: false };
+  var S = { view: "floor", tables: [], order: null, menu: null, cat: null, staff: null, lock: null, comanda: null };
   var timer = null, toastT = null;
 
   function h(tag, attrs, kids) {
@@ -22,6 +22,7 @@
     });
     return el;
   }
+  function canCash() { return !S.staff || S.staff.role !== "cameriere"; }
   function eur(c) { return (c / 100).toFixed(2).replace(".", ",") + " €"; }
   function cents(txt) {
     var n = parseFloat(String(txt).replace(",", "."));
@@ -38,13 +39,14 @@
       body: body === undefined ? undefined : JSON.stringify(body)
     }).then(function (r) {
       return r.json().then(function (j) {
-        if (!r.ok) { var e = new Error(j.error || "Errore"); e.status = r.status; throw e; }
+        if (!r.ok) { var e = new Error(j.error || "Errore"); e.status = r.status; e.locked = !!j.locked; throw e; }
         return j;
       });
     });
   }
   function fail(e) {
     if (e.status === 401) { location.href = "/login"; return; }
+    if (e.locked) { startLock(); return; }
     toast(e.message, true);
     refresh();
   }
@@ -158,7 +160,7 @@
           h("b", {}, i.qty),
           h("button", { "aria-label": "Più", onclick: function () { act("PATCH", "/orders/" + o.id + "/items/" + i.id, { qty: i.qty + 1 }); } }, "+")
         ]) : h("b", {}, i.qty + "×"),
-        h("div", {}, [i.name, i.note ? h("small", {}, i.note) : null]),
+        h("div", {}, [i.name, i.note ? h("small", {}, i.note) : null, editable ? h("small", {}, i.sent ? "✓ in cucina" : "da inviare") : null]),
         h("b", {}, eur(i.total))
       ]));
     });
@@ -166,22 +168,31 @@
     kids.push(h("div", { class: "tot" }, [h("span", {}, "Totale"), h("span", {}, eur(t.total))]));
     o.payments.forEach(function (p) {
       kids.push(h("div", { class: "pay-row" }, [h("span", {}, "Incassato " + p.method),
-        h("span", {}, eur(p.amount) + " "), o.status === "preconto" ? h("button", { "aria-label": "Annulla pagamento", onclick: function () { act("DELETE", "/orders/" + o.id + "/payments/" + p.id); } }, "✕") : null]));
+        h("span", {}, eur(p.amount) + " "), o.status === "preconto" && canCash() ? h("button", { "aria-label": "Annulla pagamento", onclick: function () { act("DELETE", "/orders/" + o.id + "/payments/" + p.id); } }, "✕") : null]));
     });
     if (editable) {
       kids.push(h("div", { class: "row" }, [
         h("button", { onclick: function () { askCover(o); } }, "Coperti"),
-        h("button", { onclick: function () { askDiscount(o); } }, "Sconto"),
-        h("button", { onclick: function () { askCustom(o); } }, "Riga libera")
+        canCash() ? h("button", { onclick: function () { askDiscount(o); } }, "Sconto") : null,
+        canCash() ? h("button", { onclick: function () { askCustom(o); } }, "Riga libera") : null
       ]));
+      if (o.unsent) kids.push(h("div", { class: "row" }, [
+        h("button", { class: "kitchen", onclick: sendKitchen }, "Invia in cucina (" + o.unsent + " " + (o.unsent === 1 ? "riga" : "righe") + ")")
+      ]));
+      if (S.comanda && S.comanda.oid === o.id) kids.push(h("a", { class: "banner ok comanda-link", href: S.comanda.url, target: "_blank", rel: "noopener" }, "Comanda inviata: stampa il foglio per la cucina →"));
       kids.push(h("div", { class: "row" }, [
-        h("button", { class: "danger", onclick: function () { if (confirm("Annullare il conto?")) act("POST", "/orders/" + o.id + "/cancel", {}, toFloorSoon); } }, "Annulla conto"),
+        canCash() ? h("button", { class: "danger", onclick: function () { if (confirm("Annullare il conto?")) act("POST", "/orders/" + o.id + "/cancel", {}, toFloorSoon); } }, "Annulla conto") : null,
         h("button", { class: "primary", disabled: !o.items.length, onclick: function () { act("POST", "/orders/" + o.id + "/bill", {}); } }, "Preconto")
       ]));
     } else if (o.status === "preconto" && o.customer_status === "confirmed") {
-      kids.push(payBox(o));
+      kids.push(canCash() ? payBox(o) : h("div", { class: "banner wait" }, "Conto confermato dal cliente: l'incasso lo fa un cassiere (serve il suo PIN)."));
     }
     return kids;
+  }
+  function sendKitchen() {
+    api("POST", "/orders/" + S.order.id + "/comanda", {}).then(function (j) {
+      S.order = j; S.comanda = { oid: j.id, url: j.comanda_url }; toast("Comanda pronta: stampala per la cucina"); render();
+    }).catch(fail);
   }
   function toFloorSoon() { setTimeout(toFloor, 0); }
   function askCover(o) {
@@ -225,17 +236,69 @@
     ]);
   }
 
+  // ---------------------------------------------------------------- PIN del personale
+  function showWho() {
+    var who = document.getElementById("pos-who");
+    if (!who) return;
+    who.textContent = "";
+    if (S.staff) {
+      who.appendChild(h("span", {}, S.staff.name + " · " + ({ cameriere: "cameriere", cassiere: "cassiere", titolare: "titolare" }[S.staff.role] || "")));
+      who.appendChild(h("button", { onclick: function () { api("POST", "/lock", {}).then(function () { S.staff = null; S.order = null; S.view = "floor"; startLock(); }); } }, "Blocca"));
+    }
+  }
+  function startLock() {
+    S.lock = { pick: null, pin: "" };
+    S.order = null; S.view = "floor";
+    api("GET", "/staff").then(function (j) {
+      if (!j.locked) { S.lock = null; return refresh(); }
+      S.lock.staff = j.staff; renderLock();
+    }).catch(fail);
+  }
+  function renderLock() {
+    var L = S.lock; app.textContent = "";
+    var box = h("div", { class: "panel lock" }, []);
+    if (!L.pick) {
+      box.appendChild(h("h2", {}, "Chi sei?"));
+      box.appendChild(h("div", { class: "floor" }, L.staff.map(function (m) {
+        return h("button", { class: "tbl", onclick: function () { L.pick = m; L.pin = ""; renderLock(); } }, [h("b", {}, m.name), h("span", {}, m.role)]);
+      })));
+    } else {
+      box.appendChild(h("h2", {}, "Ciao " + L.pick.name + ", inserisci il PIN"));
+      box.appendChild(h("div", { class: "pin-dots", "aria-live": "polite" }, L.pin.length ? "●".repeat(L.pin.length) : "—"));
+      var pad = h("div", { class: "pinpad" }, []);
+      "123456789".split("").concat(["←", "0", "OK"]).forEach(function (k) {
+        pad.appendChild(h("button", { class: k === "OK" ? "primary" : "", onclick: function () {
+          if (k === "←") L.pin = L.pin.slice(0, -1);
+          else if (k === "OK") return submitPin();
+          else if (L.pin.length < 6) L.pin += k;
+          renderLock();
+        } }, k));
+      });
+      box.appendChild(pad);
+      box.appendChild(h("button", { onclick: function () { L.pick = null; renderLock(); } }, "← Cambia persona"));
+    }
+    app.appendChild(box);
+  }
+  function submitPin() {
+    var L = S.lock;
+    api("POST", "/unlock", { staff_id: L.pick.id, pin: L.pin }).then(function (j) {
+      S.staff = j.staff; S.lock = null; showWho(); refresh().then(render);
+    }).catch(function (e) { L.pin = ""; toast(e.message, true); renderLock(); });
+  }
+
   // ---------------------------------------------------------------- ciclo
   function render() {
+    if (S.lock) { return renderLock(); }
     app.textContent = "";
     app.appendChild(S.view === "order" && S.order ? viewOrder() : viewFloor());
   }
   function refresh() {
     var p = S.view === "order" && S.order
       ? api("GET", "/orders/" + S.order.id).then(function (o) { S.order = o; })
-      : api("GET", "/floor").then(function (j) { S.tables = j.tables; });
+      : api("GET", "/floor").then(function (j) { S.tables = j.tables; S.staff = j.staff; showWho(); });
     return p.then(function () { if (!document.activeElement || document.activeElement.tagName !== "INPUT") render(); }).catch(function (e) { if (e.status === 401) location.href = "/login"; });
   }
-  refresh().then(function () { if (S.view === "floor") render(); });
-  timer = setInterval(function () { if (!document.hidden) refresh(); }, 4000);
+  if (document.querySelector('meta[name="pos-staff-mode"]')) { startLock(); }
+  else { refresh().then(function () { if (S.view === "floor") render(); }); }
+  timer = setInterval(function () { if (!document.hidden && !S.lock) refresh(); }, 4000);
 })();

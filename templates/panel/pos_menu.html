@@ -9,6 +9,7 @@
     <div class="row">
       <a class="btn {{ 'btn-primary' if tab == 'menu' else 'btn-secondary' }}" href="{{ url_for('pos_menu') }}">Menu</a>
       <a class="btn {{ 'btn-primary' if tab == 'sala' else 'btn-secondary' }}" href="{{ url_for('pos_menu', tab='sala') }}">Sala</a>
+      <a class="btn {{ 'btn-primary' if tab == 'personale' else 'btn-secondary' }}" href="{{ url_for('pos_menu', tab='personale') }}">Personale e PIN</a>
     </div>
     {% if tab == 'menu' %}
       {% if not prods %}
@@ -34,14 +35,32 @@
       <div class="card flush"><div class="table-wrap"><table class="table">
         <thead><tr><th>{{ c.name }}</th><th>IVA</th><th>Prezzo</th><th><span class="sr-only">Azioni</span></th></tr></thead><tbody>
         {% for p in prods if p.category_id == c.id %}
-          <tr><td>{{ p.name }}{% if not p.active %} <span class="badge">nascosto</span>{% endif %}</td><td>{{ '%g' % p.vat_rate }}%</td>
-            <td><form method="post" action="{{ url_for('pos_menu_post', action='product-price') }}" class="row-actions"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ p.id }}">
-              <label class="sr-only" for="pr{{ p.id }}">Prezzo di {{ p.name }}</label><input class="input" id="pr{{ p.id }}" name="price" inputmode="decimal" value="{{ '%.2f'|format(p.price_cents / 100)|replace('.', ',') }}">
-              <button class="btn btn-ghost btn-sm" type="submit">Salva</button></form></td>
+          <tr><td><form id="pf{{ p.id }}" method="post" action="{{ url_for('pos_menu_post', action='product-edit') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ p.id }}"></form>
+              <label class="sr-only" for="pn{{ p.id }}">Nome</label><input class="input" id="pn{{ p.id }}" name="name" form="pf{{ p.id }}" value="{{ p.name }}" maxlength="80" required>{% if not p.active %} <span class="badge">nascosto</span>{% endif %}</td><td>{{ '%g' % p.vat_rate }}%</td>
+            <td class="row-actions">
+              <label class="sr-only" for="pr{{ p.id }}">Prezzo di {{ p.name }}</label><input class="input" id="pr{{ p.id }}" name="price" form="pf{{ p.id }}" inputmode="decimal" value="{{ '%.2f'|format(p.price_cents / 100)|replace('.', ',') }}">
+              <button class="btn btn-ghost btn-sm" type="submit" form="pf{{ p.id }}">Salva</button></td>
             <td><form method="post" action="{{ url_for('pos_menu_post', action='product-toggle') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ p.id }}">
               <button class="btn btn-ghost btn-sm" type="submit">{{ 'Nascondi' if p.active else 'Mostra' }}</button></form></td></tr>
         {% endfor %}</tbody></table></div></div>
       {% endfor %}
+    {% elif tab == 'personale' %}
+      <div class="callout">{{ icon('info', 20) }}<span>Appena aggiungi una persona, la cassa chiede il PIN a chi la usa e il tablet resta bloccato sulla cassa: il pannello si riapre solo con la password dell'azienda. <strong>Cameriere:</strong> ordina, manda le comande, presenta il preconto. <strong>Cassiere:</strong> in più incassa, fa sconti e annulla conti. <strong>Titolare:</strong> come il cassiere, e dal tablet può aprire anche il pannello.</span></div>
+      <div class="card"><h2>Nuova persona</h2>
+        <form method="post" action="{{ url_for('pos_menu_post', action='staff') }}" class="row"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <label class="sr-only" for="s-name">Nome</label><input class="input" id="s-name" name="name" placeholder="Nome" required maxlength="40">
+          <label class="sr-only" for="s-pin">PIN</label><input class="input" id="s-pin" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="PIN (4-6 cifre)" required autocomplete="off">
+          <label class="sr-only" for="s-role">Ruolo</label><select class="input" id="s-role" name="role">{% for k, v in roles.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+          <button class="btn btn-primary" type="submit">Aggiungi</button></form></div>
+      <div class="card flush"><div class="table-wrap"><table class="table"><thead><tr><th>Nome</th><th>Ruolo</th><th>Nuovo PIN</th><th></th></tr></thead><tbody>
+        {% for m in staff %}<tr><td>{{ m.name }}{% if not m.active %} <span class="badge">disattivato</span>{% endif %}</td><td>{{ roles.get(m.role, m.role) }}</td>
+          <td><form method="post" action="{{ url_for('pos_menu_post', action='staff-pin') }}" class="row-actions"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ m.id }}">
+            <label class="sr-only" for="sp{{ m.id }}">Nuovo PIN di {{ m.name }}</label><input class="input" id="sp{{ m.id }}" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="4-6 cifre" autocomplete="off" required>
+            <button class="btn btn-ghost btn-sm" type="submit">Cambia</button></form></td>
+          <td><form method="post" action="{{ url_for('pos_menu_post', action='staff-toggle') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ m.id }}">
+            <button class="btn btn-ghost btn-sm" type="submit">{{ 'Disattiva' if m.active else 'Riattiva' }}</button></form></td></tr>
+        {% else %}<tr><td colspan="4" class="muted">Nessuno: la cassa si apre senza PIN.</td></tr>{% endfor %}
+      </tbody></table></div></div>
     {% else %}
       <div class="card"><h2>Nuovo tavolo</h2>
         <form method="post" action="{{ url_for('pos_menu_post', action='table') }}" class="row"><input type="hidden" name="csrf" value="{{ csrf_token }}">

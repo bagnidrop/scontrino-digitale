@@ -14,8 +14,10 @@ def register(app, ctx):
         cats = db.execute("SELECT * FROM pos_categories WHERE shop_id = ? ORDER BY sort, id", (sid,)).fetchall()
         prods = db.execute("SELECT * FROM pos_products WHERE shop_id = ? ORDER BY sort, id", (sid,)).fetchall()
         tables = db.execute("SELECT * FROM pos_tables WHERE shop_id = ? ORDER BY sort, id", (sid,)).fetchall()
-        tab = "sala" if request.args.get("tab") == "sala" else "menu"
-        return render_template("panel/pos_menu.html", cats=cats, prods=prods, tables=tables, tab=tab)
+        tab = request.args.get("tab") if request.args.get("tab") in ("sala", "personale") else "menu"
+        staff = db.execute("SELECT * FROM pos_staff WHERE shop_id = ? ORDER BY active DESC, name", (sid,)).fetchall()
+        return render_template("panel/pos_menu.html", cats=cats, prods=prods, tables=tables, tab=tab,
+                               staff=staff, roles=pos.ROLES)
 
     @app.post("/dashboard/menu/<action>", endpoint="pos_menu_post")
     @ctx.login_required
@@ -40,11 +42,39 @@ def register(app, ctx):
                 db.execute("UPDATE pos_products SET active = 1 - active WHERE id = ? AND shop_id = ?",
                            (int(f.get("id", 0)), sid))
                 db.commit()
-            elif action == "product-price":
+            elif action in ("product-price", "product-edit"):
+                name = f.get("name")
+                if name is not None:
+                    name = str(name).strip()[:80]
+                    if not name:
+                        raise pos.PosError("Il nome del prodotto non può essere vuoto.")
+                    db.execute("UPDATE pos_products SET name = ? WHERE id = ? AND shop_id = ?",
+                               (name, int(f.get("id", 0)), sid))
                 db.execute("UPDATE pos_products SET price_cents = ? WHERE id = ? AND shop_id = ?",
                            (ctx_price(f.get("price")), int(f.get("id", 0)), sid))
                 db.commit()
-                flash("Prezzo aggiornato.", "ok")
+                flash("Prodotto aggiornato. I conti già aperti mantengono il nome e il prezzo di quando è stato ordinato.", "ok")
+            elif action == "category-rename":
+                name = str(f.get("name", "")).strip()[:80]
+                if not name:
+                    raise pos.PosError("Il nome non può essere vuoto.")
+                db.execute("UPDATE pos_categories SET name = ? WHERE id = ? AND shop_id = ?",
+                           (name, int(f.get("id", 0)), sid))
+                db.commit()
+                flash("Categoria rinominata.", "ok")
+            elif action == "staff":
+                tab = "personale"
+                pos.add_staff(db, sid, f.get("name"), f.get("pin"), f.get("role", "cameriere"))
+                flash("Persona aggiunta. Da ora la cassa chiede il PIN.", "ok")
+            elif action == "staff-toggle":
+                tab = "personale"
+                db.execute("UPDATE pos_staff SET active = 1 - active WHERE id = ? AND shop_id = ?",
+                           (int(f.get("id", 0)), sid))
+                db.commit()
+            elif action == "staff-pin":
+                tab = "personale"
+                pos.set_staff_pin(db, sid, int(f.get("id", 0)), f.get("pin"))
+                flash("PIN cambiato.", "ok")
             elif action == "table":
                 tab = "sala"
                 pos.add_table(db, sid, f.get("label"), f.get("area"), f.get("seats", 2))

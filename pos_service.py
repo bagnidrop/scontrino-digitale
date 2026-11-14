@@ -194,7 +194,7 @@ def add_item(db, shop_id, order_id, product_id, qty=1, note=""):
     note = str(note or "").strip()[:80]
     # stesso prodotto senza nota: si somma alla riga esistente
     same = db.execute("SELECT id, qty FROM pos_order_items WHERE order_id = ? AND product_id = ? AND note = ?"
-                      " AND unit_price_cents = ?", (order_id, product_id, note, p["price_cents"])).fetchone()
+                      " AND unit_price_cents = ? AND sent_at IS NULL", (order_id, product_id, note, p["price_cents"])).fetchone()
     if same:
         if same["qty"] + qty > MAX_QTY:
             raise PosError(f"Massimo {MAX_QTY} per riga.")
@@ -296,6 +296,67 @@ def move_order(db, shop_id, order_id, table_id):
         raise PosError("Quel tavolo ha già un conto aperto.", 409)
     db.execute("UPDATE pos_orders SET table_id = ?, table_label = ? WHERE id = ?", (table_id, t["label"], order_id))
     db.commit()
+
+
+# ------------------------------------------------------------------ comanda (cucina)
+def send_to_kitchen(db, shop_id, order_id):
+    """Segna come inviate le righe non ancora in cucina. Ritorna il codice della comanda (per stamparla)."""
+    o = get_order(db, shop_id, order_id)
+    _editable(o)
+    n = db.execute("SELECT COUNT(*) FROM pos_order_items WHERE order_id = ? AND sent_at IS NULL", (order_id,)).fetchone()[0]
+    if not n:
+        raise PosError("Non ci sono righe nuove da mandare in cucina.")
+    batch = now_iso()
+    db.execute("UPDATE pos_order_items SET sent_at = ? WHERE order_id = ? AND sent_at IS NULL", (batch, order_id))
+    db.commit()
+    return batch
+
+
+def comanda_items(db, shop_id, order_id, batch):
+    get_order(db, shop_id, order_id)
+    return db.execute("SELECT * FROM pos_order_items WHERE order_id = ? AND sent_at = ? ORDER BY id",
+                      (order_id, batch)).fetchall()
+
+
+# ------------------------------------------------------------------ personale con PIN
+ROLES = {"cameriere": "Cameriere", "cassiere": "Cassiere", "titolare": "Titolare"}
+
+
+def _valid_pin(pin):
+    pin = str(pin or "").strip()
+    if not (pin.isdigit() and 4 <= len(pin) <= 6):
+        raise PosError("Il PIN deve essere di 4-6 cifre.")
+    return pin
+
+
+def add_staff(db, shop_id, name, pin, role="cameriere"):
+    from werkzeug.security import generate_password_hash
+    if role not in ROLES:
+        raise PosError("Ruolo non valido.")
+    sid = db.insert("INSERT INTO pos_staff (shop_id, name, pin_hash, role, created_at) VALUES (?,?,?,?,?)",
+                    (shop_id, _clean_name(name, "nome", 40), generate_password_hash(_valid_pin(pin)), role, now_iso()))
+    db.commit()
+    return sid
+
+
+def set_staff_pin(db, shop_id, staff_id, pin):
+    from werkzeug.security import generate_password_hash
+    db.execute("UPDATE pos_staff SET pin_hash = ? WHERE id = ? AND shop_id = ?",
+               (generate_password_hash(_valid_pin(pin)), staff_id, shop_id))
+    db.commit()
+
+
+def staff_mode(db, shop_id):
+    """True se l'azienda ha almeno una persona attiva: da quel momento la cassa chiede il PIN."""
+    return bool(db.execute("SELECT 1 FROM pos_staff WHERE shop_id = ? AND active = 1", (shop_id,)).fetchone())
+
+
+def check_pin(db, shop_id, staff_id, pin):
+    from werkzeug.security import check_password_hash
+    st = db.execute("SELECT * FROM pos_staff WHERE id = ? AND shop_id = ? AND active = 1", (staff_id, shop_id)).fetchone()
+    if st and check_password_hash(st["pin_hash"], str(pin or "")):
+        return st
+    return None
 
 
 # ------------------------------------------------------------------ preconto e verifica del cliente

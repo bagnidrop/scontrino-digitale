@@ -2,7 +2,7 @@
 
 Endpoint: pos_terminal, pos_api_* . Non importa `app`.
 """
-from flask import g, jsonify, render_template, request, url_for
+from flask import g, jsonify, redirect, render_template, request, session, url_for
 
 import pos_service as pos
 
@@ -10,20 +10,47 @@ import pos_service as pos
 def register(app, ctx):
     get_db = ctx.get_db
 
-    def api(view):
-        """Login richiesto, errori PosError -> JSON. Il CSRF lo controlla app.csrf_protect (header X-CSRF)."""
+    # Azioni che un cameriere non può fare (servono cassiere o titolare).
+    CASHIER_ONLY = {"discount", "custom", "pay", "unpay", "close", "cancel"}
+
+    def staff():
+        return session.get("pos_staff")
+
+    def locked():
+        """Con il personale configurato la cassa chiede il PIN."""
+        return pos.staff_mode(get_db(), g.panel_shop["id"]) and not staff()
+
+    def api(view=None, *, open_to_locked=False, perm=None):
+        """Login richiesto, errori PosError -> JSON. Il CSRF lo controlla app.csrf_protect (header X-CSRF).
+        Con il personale attivo serve il PIN; `perm` indica un'azione riservata a cassiere/titolare."""
         from functools import wraps
 
-        @wraps(view)
-        def wrapped(*a, **kw):
-            if g.panel_shop is None:
-                return jsonify(error="Sessione scaduta: accedi di nuovo."), 401
-            try:
-                return view(*a, **kw)
-            except pos.PosError as e:
-                get_db().rollback()
-                return jsonify(error=e.message), e.status
-        return wrapped
+        def deco(view):
+            @wraps(view)
+            def wrapped(*a, **kw):
+                if g.panel_shop is None:
+                    return jsonify(error="Sessione scaduta: accedi di nuovo."), 401
+                if not open_to_locked and locked():
+                    return jsonify(error="Inserisci il PIN.", locked=True), 403
+                if perm and staff() and staff()["role"] == "cameriere":
+                    return jsonify(error="Questa azione richiede il PIN di un cassiere o del titolare."), 403
+                try:
+                    return view(*a, **kw)
+                except pos.PosError as e:
+                    get_db().rollback()
+                    return jsonify(error=e.message), e.status
+            return wrapped
+        return deco(view) if view else deco
+
+    @app.before_request
+    def pos_device_lock():
+        """Un tablet su cui la cassa è in modalità PIN resta sulla cassa: il pannello si riapre solo
+        con la password dell'azienda (si esce dalla cassa e si accede di nuovo)."""
+        if (g.get("panel_shop") is not None and session.get("pos_device")
+                and request.path.startswith("/dashboard")
+                and not (staff() and staff()["role"] == "titolare")):
+            return redirect(url_for("pos_terminal"))
+        return None
 
     def body():
         return request.get_json(silent=True) or {}
@@ -52,19 +79,26 @@ def register(app, ctx):
             "confirmed_by": o["confirmed_by"], "fiscal_status": o["fiscal_status"], "totals": t, "bill": bill,
             "receipt": receipt, "discount_cents": o["discount_cents"],
             "items": [{"id": i["id"], "name": i["name"], "qty": i["qty"], "unit": i["unit_price_cents"],
-                       "note": i["note"], "total": i["qty"] * i["unit_price_cents"]} for i in items],
+                       "note": i["note"], "total": i["qty"] * i["unit_price_cents"],
+                       "sent": bool(i["sent_at"])} for i in items],
+            "unsent": sum(1 for i in items if not i["sent_at"]),
             "payments": [{"id": p["id"], "method": p["method"], "amount": p["amount_cents"]} for p in pays],
         }
 
     @app.get("/cassa", endpoint="pos_terminal")
     @ctx.login_required
     def pos_terminal():
-        return render_template("pos/terminal.html")
+        if pos.staff_mode(get_db(), sid()):
+            session["pos_device"] = True
+        else:
+            session.pop("pos_device", None)
+            session.pop("pos_staff", None)
+        return render_template("pos/terminal.html", staff_mode=bool(session.get("pos_device")), me_staff=staff())
 
     @app.get("/cassa/api/floor")
     @api
     def pos_api_floor():
-        return jsonify(tables=pos.floor_overview(get_db(), sid()))
+        return jsonify(tables=pos.floor_overview(get_db(), sid()), staff=staff())
 
     @app.get("/cassa/api/menu")
     @api
@@ -86,7 +120,7 @@ def register(app, ctx):
             tid = int(b.get("table_id"))
         except (TypeError, ValueError):
             raise pos.PosError("Scegli un tavolo.")
-        oid = pos.open_order(get_db(), sid(), tid, b.get("covers", 0), g.panel_shop["name"])
+        oid = pos.open_order(get_db(), sid(), tid, b.get("covers", 0), (staff() or {}).get("name") or g.panel_shop["name"])
         return jsonify(order_json(oid))
 
     @app.get("/cassa/api/orders/<int:oid>")
@@ -102,7 +136,7 @@ def register(app, ctx):
         return jsonify(order_json(oid))
 
     @app.post("/cassa/api/orders/<int:oid>/custom")
-    @api
+    @api(perm=True)
     def pos_api_custom(oid):
         b = body()
         pos.add_custom_item(get_db(), sid(), oid, b.get("name"), b.get("price_cents"), b.get("vat_rate", 10))
@@ -115,7 +149,7 @@ def register(app, ctx):
         return jsonify(order_json(oid))
 
     @app.post("/cassa/api/orders/<int:oid>/discount")
-    @api
+    @api(perm=True)
     def pos_api_discount(oid):
         pos.set_discount(get_db(), sid(), oid, body().get("discount_cents", 0))
         return jsonify(order_json(oid))
@@ -130,12 +164,19 @@ def register(app, ctx):
     @api
     def pos_api_action(oid, action):
         db, b = get_db(), body()
+        if action in CASHIER_ONLY and staff() and staff()["role"] == "cameriere":
+            return jsonify(error="Questa azione richiede il PIN di un cassiere o del titolare."), 403
         if action == "bill":
             pos.request_bill(db, sid(), oid)
         elif action == "reopen":
             pos.reopen_order(db, sid(), oid)
         elif action == "confirm":
-            pos.staff_confirm(db, sid(), oid, g.panel_shop["name"])
+            pos.staff_confirm(db, sid(), oid, (staff() or {}).get("name") or g.panel_shop["name"])
+        elif action == "comanda":
+            batch = pos.send_to_kitchen(db, sid(), oid)
+            out = order_json(oid)
+            out["comanda_url"] = url_for("pos_comanda", oid=oid, batch=batch)
+            return jsonify(out)
         elif action == "cancel":
             pos.cancel_order(db, sid(), oid)
         elif action == "move":
@@ -152,7 +193,54 @@ def register(app, ctx):
         return jsonify(order_json(oid))
 
     @app.delete("/cassa/api/orders/<int:oid>/payments/<int:pid>")
-    @api
+    @api(perm=True)
     def pos_api_unpay(oid, pid):
         pos.remove_payment(get_db(), sid(), oid, pid)
         return jsonify(order_json(oid))
+
+    # ---------------------------------------------------------------- PIN del personale
+    @app.get("/cassa/api/staff")
+    @api(open_to_locked=True)
+    def pos_api_staff():
+        rows = get_db().execute("SELECT id, name, role FROM pos_staff WHERE shop_id = ? AND active = 1 ORDER BY name",
+                                (sid(),)).fetchall()
+        return jsonify(locked=locked(), staff=[{"id": r["id"], "name": r["name"], "role": r["role"]} for r in rows])
+
+    @app.post("/cassa/api/unlock")
+    @api(open_to_locked=True)
+    def pos_api_unlock():
+        b = body()
+        if ctx.rate_limited(f"pin:{sid()}:{request.remote_addr}", 20, 600, shared=True):
+            return jsonify(error="Troppi tentativi: riprova tra qualche minuto."), 429
+        try:
+            staff_id = int(b.get("staff_id"))
+        except (TypeError, ValueError):
+            return jsonify(error="Scegli chi sei."), 400
+        st = pos.check_pin(get_db(), sid(), staff_id, b.get("pin"))
+        if not st:
+            return jsonify(error="PIN sbagliato."), 403
+        session["pos_staff"] = {"id": st["id"], "name": st["name"], "role": st["role"]}
+        return jsonify(ok=True, staff=session["pos_staff"])
+
+    @app.post("/cassa/api/lock")
+    @api(open_to_locked=True)
+    def pos_api_lock():
+        session.pop("pos_staff", None)
+        return jsonify(ok=True)
+
+    # ---------------------------------------------------------------- comanda stampabile
+    @app.get("/cassa/comanda/<int:oid>", endpoint="pos_comanda")
+    @ctx.login_required
+    def pos_comanda(oid):
+        if locked():
+            return redirect(url_for("pos_terminal"))
+        batch = request.args.get("batch", "")
+        db = get_db()
+        try:
+            o = pos.get_order(db, sid(), oid)
+            items = pos.comanda_items(db, sid(), oid, batch)
+        except pos.PosError:
+            items = []
+        if not items:
+            return render_template("error.html", code=404, text="Comanda non trovata."), 404
+        return render_template("pos/comanda.html", o=o, items=items, batch=batch)

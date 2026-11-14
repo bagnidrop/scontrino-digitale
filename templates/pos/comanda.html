@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Comanda · {{ o.table_label }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="{{ url_for('static', filename='pos-comanda.css') }}">{% endblock %}
+{% block nav %}{% endblock %}
+{% block mainclass %}receipt-wrap{% endblock %}
+{% block content %}
+<article class="comanda">
+  <h1>COMANDA</h1>
+  <p class="cm-table">{{ o.table_label }}{% if o.covers %} · {{ o.covers }} coperti{% endif %}</p>
+  <p class="cm-meta">{{ batch|dt }}{% if o.opened_by %} · {{ o.opened_by }}{% endif %}</p>
+  <ul>{% for i in items %}<li><b>{{ i.qty }}×</b> {{ i.name }}{% if i.note %}<span class="cm-note">{{ i.note }}</span>{% endif %}</li>{% endfor %}</ul>
+</article>
+<div class="actions"><button type="button" class="btn" data-print>Stampa comanda</button> <a class="btn ghost" href="{{ url_for('pos_terminal') }}">← Torna alla cassa</a></div>
+{% endblock %}

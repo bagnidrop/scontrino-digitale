@@ -215,3 +215,38 @@ def test_floor_overview(ctx):
     t1 = [t for t in pos.floor_overview(db, sid) if t["label"] == "Tavolo 1"][0]
     assert t1["status"] == "preconto" and t1["total_cents"] == 2600 and t1["customer_status"] == "pending"
     assert [t for t in pos.floor_overview(db, sid) if t["label"] == "Tavolo 2"][0]["status"] == "free"
+
+
+def test_comanda_batches_and_unsent_merge(ctx):
+    db, sid = ctx
+    oid = pos.open_order(db, sid, table(db, sid))
+    pos.add_item(db, sid, oid, prod(db, sid, "Margherita"), 2)
+    b1 = pos.send_to_kitchen(db, sid, oid)
+    assert [i["qty"] for i in pos.comanda_items(db, sid, oid, b1)] == [2]
+    with pytest.raises(pos.PosError):
+        pos.send_to_kitchen(db, sid, oid)  # niente di nuovo
+    pos.add_item(db, sid, oid, prod(db, sid, "Margherita"), 1)  # NON si somma alla riga già inviata
+    pos.add_item(db, sid, oid, prod(db, sid, "Caffè"), 1)
+    assert len(pos.order_items(db, oid)) == 3
+    import time as _t
+    _t.sleep(1.1)
+    b2 = pos.send_to_kitchen(db, sid, oid)
+    names = sorted(i["name"] for i in pos.comanda_items(db, sid, oid, b2))
+    assert names == ["Caffè", "Margherita"] and [i["qty"] for i in pos.comanda_items(db, sid, oid, b1)] == [2]
+    with pytest.raises(pos.PosError):
+        pos.comanda_items(db, sid + 9999, oid, b1)
+
+
+def test_staff_pin(ctx):
+    db, sid = ctx
+    assert pos.staff_mode(db, sid) is False
+    a = pos.add_staff(db, sid, "Marco", "1234", "cameriere")
+    assert pos.staff_mode(db, sid) is True
+    assert pos.check_pin(db, sid, a, "1234")["name"] == "Marco"
+    assert pos.check_pin(db, sid, a, "0000") is None and pos.check_pin(db, sid + 9999, a, "1234") is None
+    for bad in ("12", "abcd", "1234567", ""):
+        with pytest.raises(pos.PosError):
+            pos.add_staff(db, sid, "X", bad)
+    pos.set_staff_pin(db, sid, a, "9876")
+    assert pos.check_pin(db, sid, a, "1234") is None and pos.check_pin(db, sid, a, "9876")
+    assert db.execute("SELECT pin_hash FROM pos_staff WHERE id = ?", (a,)).fetchone()[0] != "9876"
